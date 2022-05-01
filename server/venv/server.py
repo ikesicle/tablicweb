@@ -41,7 +41,7 @@ wsl.addHandler(logging.StreamHandler())
 logwkzg = logging.getLogger('werkzeug')
 logwkzg.setLevel(logging.ERROR)
 """
-@app.route("/gamehost", methods = ["GET", "POST"])
+@app.route("/gamehost", methods = ["POST"])
 async def gamehost():
   def rejectRequest(code, msg):
     resp = make_response(msg)
@@ -52,6 +52,7 @@ async def gamehost():
   okReq = make_response("OK")
   okReq.status_code = 200
   okReq.headers["content-type"] = "text/plain"
+  
   if request.method == "POST":
     actiontype = request.headers["actiontype"]
     userid = request.headers["userid"]
@@ -59,7 +60,7 @@ async def gamehost():
     actiondata = request.json
     room = None
     try:
-      room = fstore.document("rooms/gameid")
+      room = fstore.document("rooms/" + gameid)
     except: return rejectRequest(404, "Room not found.")
 
     roomsnapshot = roomdata.get()
@@ -67,7 +68,21 @@ async def gamehost():
     roomsnapshot = roomsnapshot.data
 
     def redistributeCards():
-      pass
+      hands = {
+        "p1hand": [],
+        "p2hand": [],
+        "p3hand": [],
+        "p4hand": [],
+      }
+      newdeck = roomsnapshot["deck"]
+      for rpt in range(0,2):
+        for playerhands in range(0, roomsnapshot.playercount):
+          lcp = "p" + str(playerhands) + "hand"
+          hands[lcp] += newdeck[:3]
+          newdeck = newdeck[3:]
+      hands["deck"] = newdeck
+      room.set(hands, merge=True)
+
     if actiontype == "turn":
       cp = "p" + str(roomsnapshot["turn"]+1) + "hand"
       if roomsnapshot["players"][roomsnapshot["turn"]] != userid: return rejectRequest(403, "Not your turn!")
@@ -77,19 +92,22 @@ async def gamehost():
         newtalon = roomsnapshot["talon"]
         if actiondata["card"] not in newhand: return rejectRequest(403, "You don't have card %s!" % actiondata["card"])
         newtalon.append(actiondata["card"])
-        del newhand[actiondata["card"]]
+        del newhand[newhand.index(actiondata["card"])]
         room.set({
           cp: newhand,
           "talon": newtalon,
+          "turn": (roomsnapshot["turn"]+1) % roomsnapshot["playercount"],
           "lastPlay": "play " + actiondata["card"]
         }, merge=True)
 
-        return ok
+        if not bool(newhand) and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
+          redistributeCards()
 
+        return ok
       elif actiondata["type"] == "capture":
         newhand = roomsnapshot[cp]
         if actiondata["card"] not in newhand: return rejectRequest(403, "You don't have card %s!" % actiondata["card"])
-        del newhand[actiondata["card"]]
+        del newhand[newhand.index(actiondata["card"])]
         newtalon = []
         captured = []
         points = roomsnapshot["points"]
@@ -102,18 +120,21 @@ async def gamehost():
           cp: newhand,
           "talon": newtalon,
           "points": points,
+          "turn": (roomsnapshot["turn"]+1) % roomsnapshot["playercount"],
           "lastPlay": "capture " + actiondata["card"] + " " + " ".join(actiondata[""])
         }, merge=True);
 
+        if not bool(newhand) and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
+          redistributeCards()
+
         return okReq
+
 
       return rejectRequest(400, "Invalid action specifier")
 
     elif actiontype == "chat": return rejectRequest(404, "Chat not implemented yet")
     
     return rejectRequest(404, "Not implemented")
-
-
 
   print("Recieved something!")
   return "Brahmin"

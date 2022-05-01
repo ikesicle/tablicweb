@@ -1,6 +1,7 @@
 const faces = [ "Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King" ];
 const suits = [ "Hearts", "Clubs", "Diamonds", "Spades" ];
 const NUMBER_OF_CARDS = 52;
+const faceabbrs = [ "A", "2", "3", "4", "5", "6", "7", "8", "9", "0", "J", "Q", "K" ];
 
 function verifyCap(crds, capval) {
   if (Math.max(crds) > capval) {
@@ -83,15 +84,13 @@ function s2arr(st) {
 function ranNum(low, high) { return low + Math.floor(Math.random()*(high-low)); }
 
 
-class Deck{
+class Deck {
   constructor() {
     this.deck = new Array(NUMBER_OF_CARDS);
-    this.currentCard = 0;
-    for (var count = 0; count < this.deck.length; count++) this.deck[count] = new Card(faces[count % 11], suits[count / 13]);
+    for (var count = 0; count < this.deck.length; count++) this.deck[count] = new Card(faceabbrs[count % 11]+suits[count / 13]);
   }
 
   Shuffle() {
-    this.currentCard = 0;
     for (var first = 0; first < this.deck.length; first++)
     {
       var second = ranNum(0,NUMBER_OF_CARDS);
@@ -101,25 +100,24 @@ class Deck{
     }
   }
 
-  DealCard() {
-    if (this.currentCard < this.deck.length) {
-      return this.deck[this.currentCard++];
-    }
-    return null
+  DealCard(count) {
+    const ret = this.deck.slice(0,count);
+    this.deck.splice(0,count);
+    return ret;
   }
 }
 
 class Card {
-  constructor(cardFace, cardSuit) {
-      this.face = cardFace;
-      this.suit = cardSuit;
+  constructor(card) {
+      this.face = card[1];
+      this.suit = card[0];
   }
   toString() { return this.face + " of " + this.suit; }
 
   value() {
-    let val = faces.index(this.face);
+    let val = faceabbrs.index(this.face);
     return val + 1 + (val >= 10);
   }
 }
 
-export default { verifyCap, Deck, Card, ranNum, faces, suits, NUMBER_OF_CARDS }
+export { verifyCap, Deck, Card, ranNum, faces, suits, NUMBER_OF_CARDS }
