@@ -97,6 +97,7 @@
   width: 17.5vh; /* Fixed calculated */
   transition: 0.2s;
   cursor: grab;
+  border: 1px black solid;
 }
 
 .crdcontainer:hover {
@@ -157,3 +158,5 @@
   background: white;
   cursor: pointer;
 }
+
+

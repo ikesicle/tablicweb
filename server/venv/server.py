@@ -42,7 +42,6 @@ async def gamehost():
     resp.headers["content-type"] = "text/plain"
     return resp
 
-  print("Processing Request!")
   okReq = make_response("OK")
   okReq.status_code = 200
   okReq.headers["content-type"] = "text/plain"
@@ -58,8 +57,9 @@ async def gamehost():
 
     roomsnapshot = room.get()
     if not roomsnapshot.exists: return rejectRequest(404, "Room no longer exists.")
+    print("Serving Game Request - "+roomsnapshot.id)
     roomsnapshot = roomsnapshot._data
-    print(roomsnapshot)
+
     def redistributeCards():
       hands = {
         "p1hand": [],
@@ -74,7 +74,7 @@ async def gamehost():
           hands[lcp] += newdeck[:3]
           newdeck = newdeck[3:]
       hands["deck"] = newdeck
-      room.update(hands )
+      room.update(hands)
 
     if actiondata["datatype"] == "turn":
       cp = "p" + str(roomsnapshot["turn"]+1) + "hand"
@@ -93,9 +93,14 @@ async def gamehost():
           "lastPlay": "play " + actiondata["card"]
         } )
 
-        if not bool(newhand) and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
-          redistributeCards()
-
+        if not newhand and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
+          if not roomsnapshot["deck"]:
+            # End Game
+            room.update({
+              "started": False,
+              "winner": roomsnapshot["playernames"][roomsnapshot["points"].index(max(roomsnapshot["points"]))]
+            })
+          else: redistributeCards()
         return okReq
       elif actiondata["type"] == "capture":
         newhand = roomsnapshot[cp]
@@ -120,6 +125,12 @@ async def gamehost():
         } );
 
         if not bool(newhand) and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
+          if not roomsnapshot["deck"]:
+            # End Game
+            room.update({
+              "started": False,
+              "winner": roomsnapshot["playernames"][roomsnapshot["points"].index(max(roomsnapshot["points"]))]
+            })
           redistributeCards()
 
         return okReq
@@ -130,11 +141,9 @@ async def gamehost():
     elif actiondata["datatype"] == "chat": return rejectRequest(404, "Chat not implemented yet")
     
     return rejectRequest(404, "Not implemented")
-
-  print("Recieved something!")
   return "Brahmin"
 
 
 if __name__ == "__main__": 
-  print("running on main")
+  print("Brahmin")
   app.run(host='0.0.0.0', port=3001, debug=True, use_reloader=True)

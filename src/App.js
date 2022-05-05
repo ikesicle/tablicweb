@@ -6,7 +6,7 @@ import 'firebase/compat/firestore';
 import 'firebase/compat/auth';
 import React, { useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { useDocumentData, useCollectionData } from 'react-firebase-hooks/firestore';
+import { useDocumentData, useCollectionData, useCollection } from 'react-firebase-hooks/firestore';
 import { cards } from './cards.js';
 import cardcount from './cardcount.png';
 import firebaseConfig from './cfg.js';
@@ -15,6 +15,15 @@ import firebaseConfig from './cfg.js';
 const fbase = firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth()
 const firestore = firebase.firestore()
+
+function Dialog(props) {
+  return (
+    <div className="dialog" style={props.gd ? {} : {display: "none"}}>
+      {props.gd}
+      <button className="closedialog" onClick={()=>props.sd(null)}>Ok</button>
+    </div>
+  );
+}
 
 function CardVis(props) {
   const [ selected, setSelect ] = useState(false)
@@ -79,11 +88,17 @@ function Game(props) {
         yourHand = [];
     }
   }
-
-  
   
   const sendAction = async () => {
     const card = handHighlights;
+    // Check to see which items in talonHighlights are still there
+    for (var i = 0; i < talonHighlights.length; i++) {
+      if (gameState.talon.indexOf(talonHighlights[i]) === -1) {
+        console.log(`${talonHighlights[i]} no longer in talon. Removing from query.`)
+        talonHighlights.splice(i, 1);
+        i--;
+      }
+    }
     const actiontype = talonHighlights.length == 0 ? "play" : "capture";
     if (!handHighlights) {
       setDialog("Select a card to play first!");
@@ -91,11 +106,12 @@ function Game(props) {
     if (!verifyCap(talonHighlights.map(crd => (new Card(crd)).value()), (new Card(handHighlights)).value())) {
       console.log("Failed to verify.")
       setDialog("Invalid Card Combination!")
+      selectTalon(Array(0))
       return;
     }
     console.log("Sending " + actiontype + "-type data")
     console.log("Sending data!")
-    const response = fetch("/gamehost", {
+    await fetch("/gamehost", {
       method: "POST",
       headers: {
         "userid": auth.currentUser.uid,
@@ -108,26 +124,24 @@ function Game(props) {
         card: card,
         captures: talonHighlights
       })
-    }).then(()=> {
-      console.log("Finished.")
+    }).then(async (response)=> {
       selectHand(null)
       selectTalon(Array(0))
-      setDialog(null);
+      if (response.status !== 200) {
+        setDialog(await response.text());
+      }
+      else setDialog(null);
     }).catch((err)=>{
       console.log("Error in retrieval.")
       setDialog("An unexpected error occurred while sending.")
     });
-    await response;
   };
   
   if (gameState && !loading && !error) {
     return (
       gameState.started ? (
         <React.Fragment>
-        <div className="dialog" style={dialogMessage ? {} : {display: "none"}}>
-          {dialogMessage}
-          <button className="closedialog" onClick={()=>setDialog(null)}>Ok</button>
-        </div>
+        <Dialog gd={dialogMessage} sd={setDialog} />
         <Hand data={yourHand} selectHand={selectHand} selectedHand={handHighlights}/>
         <button className="pushaction" onClick={()=>sendAction()}>Play / Capture</button>
 
@@ -196,20 +210,16 @@ function Login(props) {
 }
 
 function RoomSelect(props) {
-  const game = firestore.collection('rooms').doc("sample-game");
   const roomlist = firestore.collection('rooms');
-  const query = roomlist.orderBy('createdAt').limit(25);
-  const [rooms] = useCollectionData(query);
+  const [rooms] = useCollection(roomlist);
   const [user] = useAuthState(auth);
-  const [dialog, setDialog] = useState("")
-  
+  const [dialog, setDialog] = useState(null)
   const joinRoom = async (rm) => {
-    console.log("Logging in")
+    console.log(`Logging in to room '${rm}'`)
+    const game = roomlist.doc(rm);
     const go = await game.get();
     const gamedata = go.data();
-    console.log(go.data());
     if (user && gamedata) {
-      console.log(user.uid)
       if (gamedata["playercount"] >= 2 && gamedata["players"].indexOf(user.uid) == -1) {
         setDialog("Max players reached!")
       } else if (gamedata["players"].indexOf(user.uid) == -1) {
@@ -220,6 +230,7 @@ function RoomSelect(props) {
         }, {
           merge: true
         });
+        props.setGame(rm);
       } else props.setGame(rm);
       
     }
@@ -233,9 +244,9 @@ function RoomSelect(props) {
       <h1>
         Welcome, {user ? user.displayName : "Anonymous"}
       </h1>
-      <div> {dialog} </div>
+      <Dialog gd={dialog} sd={setDialog} />
       <ul>
-        <li onClick={async () => await joinRoom('sample-game')}>Join room 'Sample-Room' by clicking on this text</li>
+        { rooms && (rooms.docs).map(rm => <li key={rm.id} onClick={async () => await joinRoom(rm.id)}>Room {rm.id}</li>) }
       </ul>
       <button onClick={()=>auth.signOut()}>Sign Out</button>
 
@@ -277,7 +288,8 @@ function RoomStart(props) {
   if (gameState && !loading && !error) {
     return (
       <React.Fragment>
-        <h1> { gameState.roomName } </h1>
+        <h1> { gameState.roomname } </h1>
+        <h2> { gameState.winner && `Winner: ${gameState.winner} with ${Math.max.apply(Math, gameState.points)} points!`} </h2>
         <ul>
           {gameState.playernames.map(name => <li key={name}>{name}</li>)}
         </ul>

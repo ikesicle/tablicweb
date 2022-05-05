@@ -115,11 +115,13 @@ function ranNum(low, high) { return low + Math.floor(Math.random()*(high-low)); 
 
 class Deck {
   constructor() {
-    this.deck = new Array(NUMBER_OF_CARDS);
-    for (var count = 0; count < this.deck.length; count++) this.deck[count] = new Card(suitabbrs[Math.floor(count / 13)]+faceabbrs[count % 11]);
+    this.deck = new Array(NUMBER_OF_CARDS).fill(null);
+    for (var count = 0; count < this.deck.length; count++) this.deck[count] = new Card(suitabbrs[Math.floor(count / 13)]+faceabbrs[count % 13]);
+    console.log(this.deck.slice())
   }
 
   Shuffle() {
+    console.log("Shuffling...")
     for (var first = 0; first < this.deck.length; first++)
     {
       var second = ranNum(0,NUMBER_OF_CARDS);
@@ -127,6 +129,7 @@ class Deck {
       this.deck[first] = this.deck[second];
       this.deck[second] = temp;
     }
+    console.log(this.deck.slice())
   }
 
   DealCard(count) {
