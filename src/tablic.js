@@ -2,15 +2,19 @@ const faces = [ "Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", 
 const suits = [ "Hearts", "Clubs", "Diamonds", "Spades" ];
 const NUMBER_OF_CARDS = 52;
 const faceabbrs = [ "A", "2", "3", "4", "5", "6", "7", "8", "9", "0", "J", "Q", "K" ];
+const suitabbrs = [ "1", "2", "3", "4" ]
 
 function verifyCap(crds, capval) {
+  console.log(`Verifying capture of [${crds}] with [${capval}]`)
+
   if (Math.max(crds) > capval) {
     return false;
   }
+  if (crds.length == 0) return true;
   var k;
-  var final = false;
   // TODO: Currently does not account for aces possibly having a value of 11
   var crdsclone = crds.slice();
+  const crdsorig = crdsclone.slice();
   var initcheck = true;
   var pass;
   crdsclone.sort((a, b) => a - b);
@@ -23,14 +27,39 @@ function verifyCap(crds, capval) {
     initcheck = false;
     crds = crdsclone.slice();
 
-  while (crds.length > 0) {
-      k = findCombo(crds.slice(), capval);
-      if (!k) {pass = false; break}
-      k.forEach(value => {
-        crds.splice(crds.indexOf(value),1);
-      });
-  }
+    while (crds.length > 0) {
+        k = findCombo(crds.slice(), capval);
+        if (!k) {pass = false; break}
+        k.forEach(value => {
+          crds.splice(crds.indexOf(value),1);
+        });
+    }
+
     if (pass) return true;
+  }
+  if (capval == 1) {
+    console.log("Reverifiying with 11")
+    capval = 11
+    crdsclone = crdsorig.slice();
+    initcheck = true;
+    while (crdsclone.indexOf(1) !== -1 || initcheck) {
+      pass = true;
+      let i = crdsclone.indexOf(1);
+      if (i !== -1 && !initcheck) {
+        crdsclone[i] = 11;
+      }
+      initcheck = false;
+      crds = crdsclone.slice();
+
+      while (crds.length > 0) {
+          k = findCombo(crds.slice(), capval);
+          if (!k) {pass = false; break}
+          k.forEach(value => {
+            crds.splice(crds.indexOf(value),1);
+          });
+      }
+      if (pass) return true;
+    }
   }
   return false;
 }
@@ -87,7 +116,7 @@ function ranNum(low, high) { return low + Math.floor(Math.random()*(high-low)); 
 class Deck {
   constructor() {
     this.deck = new Array(NUMBER_OF_CARDS);
-    for (var count = 0; count < this.deck.length; count++) this.deck[count] = new Card(faceabbrs[count % 11]+suits[count / 13]);
+    for (var count = 0; count < this.deck.length; count++) this.deck[count] = new Card(suitabbrs[Math.floor(count / 13)]+faceabbrs[count % 11]);
   }
 
   Shuffle() {
@@ -112,10 +141,10 @@ class Card {
       this.face = card[1];
       this.suit = card[0];
   }
-  toString() { return this.face + " of " + this.suit; }
+  toString() { return this.suit+this.face; }
 
   value() {
-    let val = faceabbrs.index(this.face);
+    let val = faceabbrs.indexOf(this.face);
     return val + 1 + (val >= 10);
   }
 }

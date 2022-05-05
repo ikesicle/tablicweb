@@ -9,16 +9,7 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { useDocumentData, useCollectionData } from 'react-firebase-hooks/firestore';
 import { cards } from './cards.js';
 import cardcount from './cardcount.png';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBbeR5Y3qxAc51tsxF_dlcdgmXXM-NVT0g",
-  authDomain: "tablicweb.firebaseapp.com",
-  projectId: "tablicweb",
-  storageBucket: "tablicweb.appspot.com",
-  messagingSenderId: "1002328769656",
-  appId: "1:1002328769656:web:e4ab64b2a9bda89795d98d"
-};
-
+import firebaseConfig from './cfg.js';
 
 // Initialize Firebase
 const fbase = firebase.initializeApp(firebaseConfig);
@@ -28,20 +19,27 @@ const firestore = firebase.firestore()
 function CardVis(props) {
   const [ selected, setSelect ] = useState(false)
   return (
-    <img src={cards[props.type]} style={{position: "absolute", left: String(props.handindex*15) + "px", bottom: props.selectedHand == props.type ? "40px" : "0px"}} onClick={()=>{
+    <div className={"crdcontainer" + (props.selected ? " selectborder" : "")} style={{
+      left: String(props.handindex*10) + "%", 
+      bottom: props.selected ? "20px" : "0px"
+    }} onClick={()=>{
+      console.log("Clicked " + props.type)
       props.onClick(props.type);
-    }} />
+    }}>
+      <img src={cards[props.type]} className="card" />
+    </div>
   )
 }
 
 function Talon(props) {
+  var cnt = 0;
   return (
-      <div className="talonGrid">
+      <div className="talon-grid">
         {props.data && props.data.map(
-          crd => <CardVis type={crd} handindex={0} onClick={(tile) => {var k = props.selectedHand;
-            if (k.indexOf(crd) == -1) {k.push(crd);}
-            else {k.splice(k.indexOf(crd), 1);}
-            props.selectedTalon(k);
+          crd => <CardVis key={cnt} type={crd} selected={(props.selectedTalon.indexOf(crd) !== -1)} handindex={cnt++} onClick={() => {var k = props.selectedTalon.slice();
+            if (k.indexOf(crd) === -1) k.push(crd);
+            else k.splice(k.indexOf(crd), 1);
+            props.selectTalon(k);
           }} />
         )}
       </div>
@@ -49,17 +47,12 @@ function Talon(props) {
 }
 
 function Hand(props) {
-  var ret = [], cindex = 0;
-  if (props.hand) {
-    props.hand.forEach(crd=>{
-      ret.push(
-        <CardVis type={crd} handindex={cindex++} onClick={props.selectHand} st={props.selectedHand}/>
-      )
-    });
-  }
+  var cindex = 0;
   return (
-    <div className="player hand">
-      {ret}
+    <div className="player-hand">
+      {props.data && props.data.map( crd =>
+        <CardVis key={cindex} type={crd} selected={(props.selectedHand === crd)} handindex={cindex++} onClick={props.selectHand} st={props.selectedHand}/>
+      )}
     </div>
   )
 }
@@ -68,34 +61,41 @@ function Game(props) {
   const game = firestore.collection('rooms').doc(props.gameID);
   const [ handHighlights, selectHand ] = useState(null);
   const [ talonHighlights, selectTalon ] = useState(Array(0));
-  const [ dialogMessage, setDialog ] = useState("");
+  const [ dialogMessage, setDialog ] = useState(null);
   const [ gameState, loading, error ] = useDocumentData(game);
-  console.log(`Error Value: ${error}`)
-  console.log(`Loading Value: ${loading}`);
-  console.log(`GameState Value: ${gameState}`);
   
-  var playerIndex, yourHand, actiontype;
+  var playerIndex, yourHand;
 
-
-  const calculate = () => {
+  if (gameState && !loading && !error) {
     playerIndex = gameState.players.indexOf(auth.currentUser.uid);
     switch (playerIndex) {
       case 0:
-        yourHand = gameState.players.p1hand;
+        yourHand = gameState.p1hand;
+        break;
       case 1:
-        yourHand = gameState.player.p2hand;
+        yourHand = gameState.p2hand;
+        break;
       default:
         yourHand = [];
     }
-    actiontype = selectTalon == 0 ? "play" : "capture";
   }
-  if (gameState && !loading && !error) calculate()
+
+  
+  
   const sendAction = async () => {
     const card = handHighlights;
-    if (!verifyCap(handHighlights, talonHighlights)) {
+    const actiontype = talonHighlights.length == 0 ? "play" : "capture";
+    if (!handHighlights) {
+      setDialog("Select a card to play first!");
+    }
+    if (!verifyCap(talonHighlights.map(crd => (new Card(crd)).value()), (new Card(handHighlights)).value())) {
+      console.log("Failed to verify.")
+      setDialog("Invalid Card Combination!")
       return;
     }
-    const rawresponse = await fetch(window.location.host + "/gamehost", {
+    console.log("Sending " + actiontype + "-type data")
+    console.log("Sending data!")
+    const response = fetch("/gamehost", {
       method: "POST",
       headers: {
         "userid": auth.currentUser.uid,
@@ -103,29 +103,55 @@ function Game(props) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
+        datatype: "turn",
         type: actiontype,
         card: card,
         captures: talonHighlights
       })
+    }).then(()=> {
+      console.log("Finished.")
+      selectHand(null)
+      selectTalon(Array(0))
+      setDialog(null);
+    }).catch((err)=>{
+      console.log("Error in retrieval.")
+      setDialog("An unexpected error occurred while sending.")
     });
-    setDialog(rawresponse.body);
+    await response;
   };
+  
   if (gameState && !loading && !error) {
     return (
-       gameState.started ? (
+      gameState.started ? (
         <React.Fragment>
+        <div className="dialog" style={dialogMessage ? {} : {display: "none"}}>
+          {dialogMessage}
+          <button className="closedialog" onClick={()=>setDialog(null)}>Ok</button>
+        </div>
         <Hand data={yourHand} selectHand={selectHand} selectedHand={handHighlights}/>
-        <button className="pushAction" onClick={()=>sendAction()}></button>
-        <div className="north player" pid={String(playerIndex+1)}>
-          {gameState.playernames}
+        <button className="pushaction" onClick={()=>sendAction()}>Play / Capture</button>
+
+        <div className="north player" pid={String(playerIndex+1)%2}>
+          <b>{gameState.playernames[(playerIndex+1)%2]}</b>
           <div className="pointcounter">
-            {gameState.points[(playerIndex+1)%2]}
+            {gameState.points[(playerIndex+1)%2]} PTS
           </div>
           <div className="cardcount">
             {playerIndex == 0 ? gameState.p2hand.length : gameState.p1hand.length}
-            <img src={cardcount} className="cardDisplay" />
+            <img src={cardcount} height="15" className="cardDisplay" />
           </div>
         </div>
+        <div className="south player" pid={String(playerIndex)}>
+          <b>{gameState.playernames[playerIndex]}</b>
+          <div className="pointcounter">
+            {gameState.points[playerIndex]} PTS
+          </div>
+          <div className="cardcount">
+            {playerIndex == 0 ? gameState.p1hand.length : gameState.p2hand.length}
+            <img src={cardcount} height="15" className="cardDisplay" />
+          </div>
+        </div>
+
         <Talon className="talon" data={gameState.talon} selectTalon={selectTalon} selectedTalon={talonHighlights} />
         <div className="turnIndicator">
         </div>
@@ -170,7 +196,7 @@ function Login(props) {
 }
 
 function RoomSelect(props) {
-  const game = firestore.collection('rooms').doc(props.gameID);
+  const game = firestore.collection('rooms').doc("sample-game");
   const roomlist = firestore.collection('rooms');
   const query = roomlist.orderBy('createdAt').limit(25);
   const [rooms] = useCollectionData(query);
@@ -178,23 +204,24 @@ function RoomSelect(props) {
   const [dialog, setDialog] = useState("")
   
   const joinRoom = async (rm) => {
-
     console.log("Logging in")
     const go = await game.get();
     const gamedata = go.data();
     console.log(go.data());
     if (user && gamedata) {
-      if (gamedata["playercount"] == 2 && !(user.uid in gamedata["players"])) {
+      console.log(user.uid)
+      if (gamedata["playercount"] >= 2 && gamedata["players"].indexOf(user.uid) == -1) {
         setDialog("Max players reached!")
-      }
-      if (!(user.uid in gamedata)) {
+      } else if (gamedata["players"].indexOf(user.uid) == -1) {
         game.set({
-          players: gamedata["players"] + [user.uid],
-          plist: gamedata["playernames"] + [user.displayName],
+          players: gamedata["players"].concat([user.uid]),
+          playernames: gamedata["playernames"].concat([user.displayName]),
           playercount: gamedata["playercount"] + 1
+        }, {
+          merge: true
         });
-      }
-      props.setGame(rm);
+      } else props.setGame(rm);
+      
     }
     else if (!(gamedata)) {
       setDialog("Unable to join.");
@@ -221,25 +248,30 @@ function RoomStart(props) {
   const [ gameState, loading, error ] = useDocumentData(game);
 
   const startGame = () => {
-    if (gameState.playercount < 2) {
-      setDialog("Not enough players!");
+    if (gameState.playercount != 2) {
+      setDialog("Players must be equal to 2!");
       return;
     }
     const deck = new Deck();
     deck.Shuffle();
     const talon = deck.DealCard(4);
-    const p1hand = deck.dealCard(3);
-    const p2hand = deck.dealCard(3);
-    p1hand.concat(deck.dealCard(3));
-    p2hand.concat(deck.dealCard(3));
+    var p1hand = deck.DealCard(3);
+    var p2hand = deck.DealCard(3);
+    p1hand = p1hand.concat(deck.DealCard(3));
+    p2hand = p2hand.concat(deck.DealCard(3));
+    console.log(p1hand);
+    console.log(p2hand);
     game.set({
-      deck: deck.deck,
-      talon: talon,
-      p1hand: p1hand,
-      p2hand: p2hand,
+      deck: deck.deck.map(crd => crd.toString()),
+      talon: talon.map(crd => crd.toString()),
+      p1hand: p1hand.map(crd => crd.toString()),
+      p2hand: p2hand.map(crd => crd.toString()),
       points: [0,0,0,0],
       started: true,
-      turn: 1
+      turn: 0,
+      lastPlay: "game start",
+    }, {
+      merge: true
     });
   }
   if (gameState && !loading && !error) {
@@ -247,7 +279,7 @@ function RoomStart(props) {
       <React.Fragment>
         <h1> { gameState.roomName } </h1>
         <ul>
-          {gameState.playernames.map(name => <li>{name}</li>)}
+          {gameState.playernames.map(name => <li key={name}>{name}</li>)}
         </ul>
         <button onClick={startGame}>Start Game</button>
         <div> {dialogMessage} </div>
@@ -267,7 +299,7 @@ function App() {
   return (
     <div className="App">
       {
-        user ? (gameID ? <Game gameID={gameID}/> : <RoomSelect setGame={setGame}/>) : <Login />
+        user ? (gameID ? <Game gameID={gameID}/> : <RoomSelect setGame={setGame} />) : <Login />
       }
     </div>
   );

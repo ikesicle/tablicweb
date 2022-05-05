@@ -7,15 +7,8 @@ from flask import Flask, make_response, Response, jsonify, request, abort, rende
 import threading
 import asyncio
 from tablic import evaluatePoints
+from cfg import config
 
-config = {
-  "apiKey": "AIzaSyBbeR5Y3qxAc51tsxF_dlcdgmXXM-NVT0g",
-  "authDomain": "tablicweb.firebaseapp.com",
-  "projectId": "tablicweb",
-  "storageBucket": "tablicweb.appspot.com",
-  "messagingSenderId": "1002328769656",
-  "appId": "1:1002328769656:web:e4ab64b2a9bda89795d98d"
-};
 
 cred = credentials.Certificate("tablicweb-firebase-adminsdk-90wfc-12e45345a3.json")
 firebase.initialize_app(cred)
@@ -49,12 +42,12 @@ async def gamehost():
     resp.headers["content-type"] = "text/plain"
     return resp
 
+  print("Processing Request!")
   okReq = make_response("OK")
   okReq.status_code = 200
   okReq.headers["content-type"] = "text/plain"
   
   if request.method == "POST":
-    actiontype = request.headers["actiontype"]
     userid = request.headers["userid"]
     gameid = request.headers["gameid"]
     actiondata = request.json
@@ -63,10 +56,10 @@ async def gamehost():
       room = fstore.document("rooms/" + gameid)
     except: return rejectRequest(404, "Room not found.")
 
-    roomsnapshot = roomdata.get()
+    roomsnapshot = room.get()
     if not roomsnapshot.exists: return rejectRequest(404, "Room no longer exists.")
-    roomsnapshot = roomsnapshot.data
-
+    roomsnapshot = roomsnapshot._data
+    print(roomsnapshot)
     def redistributeCards():
       hands = {
         "p1hand": [],
@@ -76,14 +69,14 @@ async def gamehost():
       }
       newdeck = roomsnapshot["deck"]
       for rpt in range(0,2):
-        for playerhands in range(0, roomsnapshot.playercount):
-          lcp = "p" + str(playerhands) + "hand"
+        for playerhands in range(0, roomsnapshot["playercount"]):
+          lcp = "p" + str(playerhands+1) + "hand"
           hands[lcp] += newdeck[:3]
           newdeck = newdeck[3:]
       hands["deck"] = newdeck
-      room.set(hands, merge=True)
+      room.update(hands )
 
-    if actiontype == "turn":
+    if actiondata["datatype"] == "turn":
       cp = "p" + str(roomsnapshot["turn"]+1) + "hand"
       if roomsnapshot["players"][roomsnapshot["turn"]] != userid: return rejectRequest(403, "Not your turn!")
       if not roomsnapshot["started"]: return rejectRequest(403, "Game not started")
@@ -93,17 +86,17 @@ async def gamehost():
         if actiondata["card"] not in newhand: return rejectRequest(403, "You don't have card %s!" % actiondata["card"])
         newtalon.append(actiondata["card"])
         del newhand[newhand.index(actiondata["card"])]
-        room.set({
+        room.update({
           cp: newhand,
           "talon": newtalon,
           "turn": (roomsnapshot["turn"]+1) % roomsnapshot["playercount"],
           "lastPlay": "play " + actiondata["card"]
-        }, merge=True)
+        } )
 
         if not bool(newhand) and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
           redistributeCards()
 
-        return ok
+        return okReq
       elif actiondata["type"] == "capture":
         newhand = roomsnapshot[cp]
         if actiondata["card"] not in newhand: return rejectRequest(403, "You don't have card %s!" % actiondata["card"])
@@ -116,13 +109,15 @@ async def gamehost():
           else: captured.append(card)
         captured.append(actiondata["card"])
         points[roomsnapshot["turn"]] += evaluatePoints(captured)
-        room.set({
+        if newtalon == []:
+          points[roomsnapshot["turn"]] += 1
+        room.update({
           cp: newhand,
           "talon": newtalon,
           "points": points,
           "turn": (roomsnapshot["turn"]+1) % roomsnapshot["playercount"],
-          "lastPlay": "capture " + actiondata["card"] + " " + " ".join(actiondata[""])
-        }, merge=True);
+          "lastPlay": "capture " + actiondata["card"] + " " + " ".join(actiondata["captures"])
+        } );
 
         if not bool(newhand) and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
           redistributeCards()
@@ -132,7 +127,7 @@ async def gamehost():
 
       return rejectRequest(400, "Invalid action specifier")
 
-    elif actiontype == "chat": return rejectRequest(404, "Chat not implemented yet")
+    elif actiondata["datatype"] == "chat": return rejectRequest(404, "Chat not implemented yet")
     
     return rejectRequest(404, "Not implemented")
 
@@ -142,4 +137,4 @@ async def gamehost():
 
 if __name__ == "__main__": 
   print("running on main")
-  app.run(host='0.0.0.0', port=3001, debug=False, use_reloader=False)
+  app.run(host='0.0.0.0', port=3001, debug=True, use_reloader=True)

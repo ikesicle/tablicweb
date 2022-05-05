@@ -14,7 +14,8 @@ def evaluatePoints(arr):
 		if card in SPECIAL_CARDS:
 			dp += SPECIAL_CARDS[card]
 			continue
-		cardval = card[1:]
+		cardval = card[1]
 		if cardval in ("A", "0", "J", "Q", "K"):
 			dp += 1
+	print(f"Point evaluation for {arr}: {dp}")
 	return dp
