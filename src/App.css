@@ -107,8 +107,8 @@
 
 .dialog {
   position: absolute;
-  left: 30vh;
-  right: 30vh;
+  left: 30vw;
+  right: 30vw;
   top: 40vh;
   bottom: 40vh;
   z-index: 2;
@@ -157,6 +157,86 @@
   left: 35vw;
   background: white;
   cursor: pointer;
+}
+
+.roombutton {
+  cursor: pointer;
+  border: 2px dashed black;
+  text-align: left;
+  height: 100px;
+  display: flex;
+  flex-direction: row;
+  background-color: gray;
+  transition: 0.5s;
+  transform: translate(0);
+}
+
+.roombutton:hover {
+  background-color: darkgreen;
+  transform: translate(7px, -7px);
+}
+
+.roombutton.nojoin:hover{
+  background-color: #8b0000;
+}
+
+.roominfo {
+  flex-grow: 3;
+  background-color: darkgray;
+  color: white;
+  clip-path: polygon(0 0, 83% 0, 100% 100%, 0% 100%);
+  padding-left: 10px;
+  height: 100%;
+  transition: 0.5s;
+}
+
+.roombutton:hover > .roominfo {
+  background-color: green;
+}
+.roombutton.nojoin:hover > .roominfo {
+  background-color: red;
+}
+
+.roomstats {
+  flex-grow: 1;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+  transition: 0.5s;
+}
+
+.roombutton:hover > .roomstats {
+  color: white;
+}
+
+.rbwrapper {
+  background-color: rgb(50,50,50);
+  width: 80%;
+  margin: auto;
+  margin-bottom: 10px;
+}
+
+.turnindicator {
+  font-size: 5vh;
+  color: rgb(170,170,170);
+  transition: 0.5s;
+}
+
+.turnindicator.current{
+  font-weight: bold;
+  color: black;
+}
+
+.turntimer {
+  font-size: 10vh;
+  font-weight: bold;
+  color: rgb(140,140,140);
+  transition: 0.5s;
+}
+
+.turntimer.current {
+  color: black;
 }
 
 

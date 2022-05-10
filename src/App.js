@@ -4,12 +4,14 @@ import { verifyCap, Deck, Card, ranNum, faces, suits, NUMBER_OF_CARDS } from './
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 import 'firebase/compat/auth';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { useDocumentData, useCollectionData, useCollection } from 'react-firebase-hooks/firestore';
 import { cards } from './cards.js';
 import cardcount from './cardcount.png';
 import firebaseConfig from './cfg.js';
+import { useInterval } from './chooks.js';
+
 
 // Initialize Firebase
 const fbase = firebase.initializeApp(firebaseConfig);
@@ -32,7 +34,6 @@ function CardVis(props) {
       left: String(props.handindex*10) + "%", 
       bottom: props.selected ? "20px" : "0px"
     }} onClick={()=>{
-      console.log("Clicked " + props.type)
       props.onClick(props.type);
     }}>
       <img src={cards[props.type]} className="card" />
@@ -72,8 +73,9 @@ function Game(props) {
   const [ talonHighlights, selectTalon ] = useState(Array(0));
   const [ dialogMessage, setDialog ] = useState(null);
   const [ gameState, loading, error ] = useDocumentData(game);
-  
-  var playerIndex, yourHand;
+  const [ time, setTime ] = useState(0);
+  const [ timerSpeed, setSpeed] = useState(null);
+  var playerIndex, yourHand, isYourTurn;
 
   if (gameState && !loading && !error) {
     playerIndex = gameState.players.indexOf(auth.currentUser.uid);
@@ -84,17 +86,24 @@ function Game(props) {
       case 1:
         yourHand = gameState.p2hand;
         break;
+      case 2:
+        yourHand = gameState.p3hand;
+        break;
+      case 3:
+        yourHand = gameState.p4hand;
+        break;
       default:
         yourHand = [];
     }
+    isYourTurn = playerIndex == gameState.turn;
   }
   
   const sendAction = async () => {
+    console.log("Sending action!")
     const card = handHighlights;
     // Check to see which items in talonHighlights are still there
     for (var i = 0; i < talonHighlights.length; i++) {
       if (gameState.talon.indexOf(talonHighlights[i]) === -1) {
-        console.log(`${talonHighlights[i]} no longer in talon. Removing from query.`)
         talonHighlights.splice(i, 1);
         i--;
       }
@@ -104,13 +113,10 @@ function Game(props) {
       setDialog("Select a card to play first!");
     }
     if (!verifyCap(talonHighlights.map(crd => (new Card(crd)).value()), (new Card(handHighlights)).value())) {
-      console.log("Failed to verify.")
       setDialog("Invalid Card Combination!")
       selectTalon(Array(0))
       return;
     }
-    console.log("Sending " + actiontype + "-type data")
-    console.log("Sending data!")
     await fetch("/gamehost", {
       method: "POST",
       headers: {
@@ -132,18 +138,96 @@ function Game(props) {
       }
       else setDialog(null);
     }).catch((err)=>{
-      console.log("Error in retrieval.")
+      console.log("Problem with sending Data to home servers: " + String(err))
       setDialog("An unexpected error occurred while sending.")
     });
   };
-  
+  // Implement Game Timer - After a turn change, set a timer.
+  // After the timer expires, send a request to the server basically asking to get on with the game
+  // For the person whose turn it is, instead send a random play card action.
+  // and is removed from the game.
+
+  const requestUpdate = async () => {
+    console.log("Sending update!")
+    if (playerIndex == gameState.turn) {
+      await fetch("/gamehost", {
+        method: "POST",
+        headers: {
+          "userid": auth.currentUser.uid,
+          "gameid": props.gameID,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          datatype: "turn",
+          type: "play",
+          card: yourHand[Math.floor(Math.random()*yourHand.length)],
+          captures: []
+        })
+      }).then(async (response)=> {
+        selectHand(null)
+        selectTalon(Array(0))
+        if (response.status !== 200) {
+          setDialog(await response.text());
+        }
+        else setDialog(null);
+      }).catch((err)=>{
+        console.log("Problem with sending Data to home servers: " + String(err))
+        setDialog("An unexpected error occurred while sending.")
+      });
+    } else {
+      await fetch("/gamehost", {
+        method: "POST",
+        headers: {
+          "userid": auth.currentUser.uid,
+          "gameid": props.gameID,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          datatype: "update"
+        })
+      }).then(async (response)=> {
+        if (response.status !== 200) {
+          setDialog(await response.text());
+        }
+        else setDialog(null);
+      }).catch((err)=>{
+        console.log("Problem with sending Data to home servers: " + String(err))
+        setDialog("An unexpected error occurred while sending.")
+      });
+    }
+  }
+
+  useEffect(()=> {
+    console.log("TURN UPDATE - " + String(gameState && gameState.turn));
+    if (gameState && gameState.started) {
+      setTime("--");
+      setSpeed(100);
+    }
+    else {
+      setSpeed(null);
+    }
+  }, [gameState && gameState.turn, gameState && gameState.players])
+
+  useInterval(async ()=> { // Credit to Dan Abramov (https://overreacted.io/) for this
+    if (time <= 0) {
+      setSpeed(null)
+      setTime(0)
+      await requestUpdate();
+    }
+    else {
+      let k = firebase.firestore.Timestamp.now().seconds;
+      let j = gameState.date.seconds;
+      setTime(30-(k-j));
+    }
+  }, timerSpeed);
+
   if (gameState && !loading && !error) {
     return (
       gameState.started ? (
         <React.Fragment>
         <Dialog gd={dialogMessage} sd={setDialog} />
         <Hand data={yourHand} selectHand={selectHand} selectedHand={handHighlights}/>
-        <button className="pushaction" onClick={()=>sendAction()}>Play / Capture</button>
+        <button className="pushaction" onClick={()=>sendAction()}>Play/Capture</button>
 
         <div className="north player" pid={String(playerIndex+1)%2}>
           <b>{gameState.playernames[(playerIndex+1)%2]}</b>
@@ -155,6 +239,7 @@ function Game(props) {
             <img src={cardcount} height="15" className="cardDisplay" />
           </div>
         </div>
+
         <div className="south player" pid={String(playerIndex)}>
           <b>{gameState.playernames[playerIndex]}</b>
           <div className="pointcounter">
@@ -167,11 +252,18 @@ function Game(props) {
         </div>
 
         <Talon className="talon" data={gameState.talon} selectTalon={selectTalon} selectedTalon={talonHighlights} />
-        <div className="turnIndicator">
+        
+        <div className={"turnindicator" + (isYourTurn ? " current" : "")} >
+          {isYourTurn ? "Your" : gameState.playernames[gameState.turn] + "'s"} turn
         </div>
+        
+        <div className={"turntimer" + (isYourTurn ? " current" : "")}>
+          {time}
+        </div>
+
       </React.Fragment>
     ) : (
-      <RoomStart gameID={props.gameID}/>
+      <RoomStart gameID={props.gameID} setGame={props.setGame}/>
     )
   );
   } else {
@@ -214,6 +306,7 @@ function RoomSelect(props) {
   const [rooms] = useCollection(roomlist);
   const [user] = useAuthState(auth);
   const [dialog, setDialog] = useState(null)
+  
   const joinRoom = async (rm) => {
     console.log(`Logging in to room '${rm}'`)
     const game = roomlist.doc(rm);
@@ -239,16 +332,41 @@ function RoomSelect(props) {
     }
   };
 
+  const createGame = async () => {
+    await roomlist.add({
+      deck: [],
+      lastPlay: "",
+      p1hand: [],
+      p2hand: [],
+      p3hand: [],
+      p4hand: [],
+      playercount: 0,
+      playernames: [],
+      players: [],
+      points: Array(4).fill(0),
+      roomname: user.displayName + "'s Room",
+      started: false,
+      talon: [],
+      turn: 0,
+      winner: "",
+      password: "",
+      roomcreator: user.displayName,
+      date: null
+    }).then(async (docRef) => {
+      await joinRoom(docRef.id);
+    });
+  };
+
   return (
     <React.Fragment>
       <h1>
-        Welcome, {user ? user.displayName : "Anonymous"}
+        Welcome, {user ? user.displayName : "Anonymous"}!
       </h1>
+      <h2>Available Rooms...</h2>
       <Dialog gd={dialog} sd={setDialog} />
-      <ul>
-        { rooms && (rooms.docs).map(rm => <li key={rm.id} onClick={async () => await joinRoom(rm.id)}>Room {rm.id}</li>) }
-      </ul>
+      { rooms && (rooms.docs).map(rm => <RoomOption join={async() => joinRoom(rm.id)} rm={rm} />)}
       <button onClick={()=>auth.signOut()}>Sign Out</button>
+      <button onClick={createGame}>Create New Game</button>
 
     </React.Fragment>)
 }
@@ -270,8 +388,6 @@ function RoomStart(props) {
     var p2hand = deck.DealCard(3);
     p1hand = p1hand.concat(deck.DealCard(3));
     p2hand = p2hand.concat(deck.DealCard(3));
-    console.log(p1hand);
-    console.log(p2hand);
     game.set({
       deck: deck.deck.map(crd => crd.toString()),
       talon: talon.map(crd => crd.toString()),
@@ -281,19 +397,50 @@ function RoomStart(props) {
       started: true,
       turn: 0,
       lastPlay: "game start",
+      date: firebase.firestore.Timestamp.now()
     }, {
       merge: true
     });
   }
+
+  const leaveGame = () => {
+    let players = gameState.players.slice();
+    let playernames = gameState.playernames.slice();
+    let playercount = gameState.playercount;
+    players.splice(players.indexOf(auth.currentUser.uid),1);
+    playernames.splice(playernames.indexOf(auth.currentUser.displayName),1);
+    playercount --;
+
+    game.set({
+      players: players,
+      playernames: playernames,
+      playercount: playercount
+    }, {
+      merge: true
+    });
+    if (playercount === 0) game.delete().then(()=>props.setGame(null))
+    else props.setGame(null)
+
+  }
+
   if (gameState && !loading && !error) {
     return (
       <React.Fragment>
         <h1> { gameState.roomname } </h1>
-        <h2> { gameState.winner && `Winner: ${gameState.winner} with ${Math.max.apply(Math, gameState.points)} points!`} </h2>
+        { gameState.winner && 
+          <h2> 
+            <span style={{fontWeight: "normal"}}>Winner: </span>
+              {gameState.winner}
+            <span style={{fontWeight: "normal"}}> with </span>
+             {Math.max.apply(Math, gameState.points)}
+            <span style={{fontWeight: "normal"}}> points!</span>
+          </h2>
+        }
         <ul>
           {gameState.playernames.map(name => <li key={name}>{name}</li>)}
         </ul>
         <button onClick={startGame}>Start Game</button>
+        <button onClick={leaveGame}>Leave Game</button>
         <div> {dialogMessage} </div>
       </React.Fragment>
     )
@@ -305,13 +452,37 @@ function RoomStart(props) {
   }
 }
 
+function RoomOption(props) {
+  const data = props.rm.data()
+  const isProtected = data["password"] === "";
+  const nojoin = (data["started"] || data["playercount"] >= 2) && data["players"].indexOf(auth.currentUser.uid) === -1;
+  return (
+    <React.Fragment>
+      <div className="rbwrapper">
+        <div className={"roombutton" + (nojoin ? " nojoin" : "")} onClick={props.join}>
+          <div className={"roominfo" + (nojoin ? " nojoin" : "")}>
+            <div style={{fontSize: "2em", fontWeight: "bold"}}>{data["roomname"]}</div>
+            <div style={{fontSize: "1.5em"}}>{data["roomcreator"]}</div>
+            <div style={{fontSize: "1em", fontStyle: "italic", color: "lightgray"}}>Room ID: {props.rm.id}</div>
+          </div>
+          <div className="roomstats">
+            <div style={{flexGrow: "1"}}><b>{data["playercount"]}</b>/2 Players</div>
+            <div style={{flexGrow: "1"}}>{isProtected ? "Public" : "Protected"}</div>
+            <div style={{flexGrow: "1"}}>{data["started"] ? "In Game" : "In Lobby"}</div>
+          </div>
+        </div>
+      </div>
+    </React.Fragment>
+  )
+}
+
 function App() {
   const [user] = useAuthState(auth);
   const [gameID, setGame] = useState(null);
   return (
     <div className="App">
       {
-        user ? (gameID ? <Game gameID={gameID}/> : <RoomSelect setGame={setGame} />) : <Login />
+        user ? (gameID ? <Game gameID={gameID} setGame={setGame}/> : <RoomSelect setGame={setGame} />) : <Login />
       }
     </div>
   );

@@ -8,9 +8,12 @@ import threading
 import asyncio
 from tablic import evaluatePoints
 from cfg import config
+import os
+from datetime import datetime, timedelta, timezone
 
+path = os.path.dirname(os.path.abspath(__file__))
 
-cred = credentials.Certificate("tablicweb-firebase-adminsdk-90wfc-12e45345a3.json")
+cred = credentials.Certificate(path+"/tablicweb-firebase-adminsdk-90wfc-12e45345a3.json")
 firebase.initialize_app(cred)
 
 fstore = firestore.client()
@@ -34,6 +37,7 @@ wsl.addHandler(logging.StreamHandler())
 logwkzg = logging.getLogger('werkzeug')
 logwkzg.setLevel(logging.ERROR)
 """
+
 @app.route("/gamehost", methods = ["POST"])
 async def gamehost():
   def rejectRequest(code, msg):
@@ -76,10 +80,63 @@ async def gamehost():
       hands["deck"] = newdeck
       room.update(hands)
 
+    def endTurnAndStartNext():
+      room.update({
+        "turn": (roomsnapshot["turn"]+1) % roomsnapshot["playercount"],
+        "date": datetime.now(tz=timezone.utc)
+      })
+      if not bool(newhand) and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
+          if not roomsnapshot["deck"]:
+            # End Game
+            room.update({
+              "started": False,
+              "winner": roomsnapshot["playernames"][roomsnapshot["points"].index(max(roomsnapshot["points"]))]
+            })
+          redistributeCards()
+      if roomsnapshot["playercount"] == 1:
+        room.update({
+          "started": False,
+          "winner": roomsnapshot["playernames"][0]
+        })
+
+
+    def removePlayer():
+      print("Removing current player " + (roomsnapshot["playernames"])[roomsnapshot["turn"]])
+      hands = [roomsnapshot["p1hand"],roomsnapshot["p2hand"],roomsnapshot["p3hand"],roomsnapshot["p4hand"]]
+      players = roomsnapshot["players"]
+      pnames = roomsnapshot["playernames"]
+      pcnt = roomsnapshot["playercount"]
+      for i in range(roomsnapshot["turn"],pcnt-1):
+        hands[i] = hands[i+1]
+        players[i] = players[i+1]
+        pnames[i] = pnames[i+1]
+      hands[3] = []
+      pcnt -= 1
+      del pnames[pcnt]
+      del players[pcnt]
+
+      room.update({
+        "p1hand": hands[0],
+        "p2hand": hands[1],
+        "p3hand": hands[2],
+        "p4hand": hands[3],
+        "players": players,
+        "playernames": pnames,
+        "playercount": pcnt,
+        "turn": roomsnapshot["turn"]%pcnt
+      })
+      if pcnt == 1:
+        room.update({
+          "started": False,
+          "winner": pnames[0]
+        })
+
     if actiondata["datatype"] == "turn":
+      print("Recieved a turn action request.")
       cp = "p" + str(roomsnapshot["turn"]+1) + "hand"
       if roomsnapshot["players"][roomsnapshot["turn"]] != userid: return rejectRequest(403, "Not your turn!")
       if not roomsnapshot["started"]: return rejectRequest(403, "Game not started")
+      
       if actiondata["type"] == "play":
         newhand = roomsnapshot[cp]
         newtalon = roomsnapshot["talon"]
@@ -89,19 +146,13 @@ async def gamehost():
         room.update({
           cp: newhand,
           "talon": newtalon,
-          "turn": (roomsnapshot["turn"]+1) % roomsnapshot["playercount"],
           "lastPlay": "play " + actiondata["card"]
         } )
 
-        if not newhand and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
-          if not roomsnapshot["deck"]:
-            # End Game
-            room.update({
-              "started": False,
-              "winner": roomsnapshot["playernames"][roomsnapshot["points"].index(max(roomsnapshot["points"]))]
-            })
-          else: redistributeCards()
+        endTurnAndStartNext()
+
         return okReq
+      
       elif actiondata["type"] == "capture":
         newhand = roomsnapshot[cp]
         if actiondata["card"] not in newhand: return rejectRequest(403, "You don't have card %s!" % actiondata["card"])
@@ -120,28 +171,33 @@ async def gamehost():
           cp: newhand,
           "talon": newtalon,
           "points": points,
-          "turn": (roomsnapshot["turn"]+1) % roomsnapshot["playercount"],
           "lastPlay": "capture " + actiondata["card"] + " " + " ".join(actiondata["captures"])
-        } );
-
-        if not bool(newhand) and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
-          if not roomsnapshot["deck"]:
-            # End Game
-            room.update({
-              "started": False,
-              "winner": roomsnapshot["playernames"][roomsnapshot["points"].index(max(roomsnapshot["points"]))]
-            })
-          redistributeCards()
+        });
+        
+        endTurnAndStartNext()
 
         return okReq
-
 
       return rejectRequest(400, "Invalid action specifier")
 
     elif actiondata["datatype"] == "chat": return rejectRequest(404, "Chat not implemented yet")
-    
+
+    elif actiondata["datatype"] == "update":
+      print("Recieved an update request.")
+      await asyncio.sleep(1)
+      ctime = datetime.now(tz=timezone.utc)
+      limittime = (roomsnapshot["date"] + timedelta(seconds=30)) if roomsnapshot["date"] else ctime
+      if ctime <= limittime:
+        print("Within alloted answer time, ignoring")
+        return okReq
+      
+      cturn = roomsnapshot["turn"]
+      if cturn == room.get()._data["turn"]:
+        removePlayer()
+      return okReq
+
     return rejectRequest(404, "Not implemented")
-  return "Brahmin"
+  return "Brahmin Brahmin"
 
 
 if __name__ == "__main__": 
