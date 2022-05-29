@@ -1,7 +1,6 @@
 import firebase_admin as firebase
 import firebase_admin.firestore as firestore
 from firebase_admin import credentials
-import logging
 from time import sleep
 from flask import Flask, make_response, Response, jsonify, request, abort, render_template
 import threading
@@ -10,6 +9,7 @@ from tablic import evaluatePoints
 from cfg import config
 import os
 from datetime import datetime, timedelta, timezone
+from waitress import serve
 
 path = os.path.dirname(os.path.abspath(__file__))
 
@@ -21,15 +21,16 @@ rooms = fstore.collection("rooms")
 
 app = Flask(__name__)
 
+"""
 logging.basicConfig(
-  filename="debug.log",
-  filemode="w",
+  filename="/tmp/debug.log",
+  filemode="w+",
   level="DEBUG",
   format="[%(asctime)s.%(msecs)03d] %(levelname)s... %(message)s",
   datefmt='%H:%M:%S'
 )
 
-"""
+
 wsl = logging.getLogger('websockets')
 wsl.setLevel(logging.DEBUG)
 wsl.addHandler(logging.StreamHandler())
@@ -38,17 +39,19 @@ logwkzg = logging.getLogger('werkzeug')
 logwkzg.setLevel(logging.ERROR)
 """
 
-@app.route("/gamehost", methods = ["POST"])
+@app.route("/gamehost", methods = ["POST", "GET"])
 async def gamehost():
   def rejectRequest(code, msg):
     resp = make_response(msg)
     resp.status_code = code
     resp.headers["content-type"] = "text/plain"
+    resp.headers["Access-Control-Allow-Origin"] = "https://tablicweb.web.app"
     return resp
 
   okReq = make_response("OK")
   okReq.status_code = 200
   okReq.headers["content-type"] = "text/plain"
+  okReq.headers["Access-Control-Allow-Origin"] = "https://tablicweb.web.app"
   
   if request.method == "POST":
     userid = request.headers["userid"]
@@ -99,7 +102,6 @@ async def gamehost():
           "winner": roomsnapshot["playernames"][0]
         })
 
-
     def removePlayer():
       print("Removing current player " + (roomsnapshot["playernames"])[roomsnapshot["turn"]])
       hands = [roomsnapshot["p1hand"],roomsnapshot["p2hand"],roomsnapshot["p3hand"],roomsnapshot["p4hand"]]
@@ -148,9 +150,7 @@ async def gamehost():
           "talon": newtalon,
           "lastPlay": "play " + actiondata["card"]
         } )
-
         endTurnAndStartNext()
-
         return okReq
       
       elif actiondata["type"] == "capture":
@@ -197,9 +197,13 @@ async def gamehost():
       return okReq
 
     return rejectRequest(404, "Not implemented")
-  return "Brahmin Brahmin"
+
+  elif request.method == "GET":
+    return okReq
+
+  return rejectRequest(501, "Unsupported HTTP Method.")
 
 
 if __name__ == "__main__": 
-  print("Brahmin")
-  app.run(host='0.0.0.0', port=3001, debug=True, use_reloader=True)
+  #app.run(host='0.0.0.0', port=3001, debug=True, use_reloader=True)
+  serve(app)

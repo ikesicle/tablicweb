@@ -20,5 +20,4 @@ function useInterval(callback, delay) {
 	}, [delay]);
 }
 
-
 export { useInterval };

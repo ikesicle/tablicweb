@@ -9,7 +9,7 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { useDocumentData, useCollectionData, useCollection } from 'react-firebase-hooks/firestore';
 import { cards } from './cards.js';
 import cardcount from './cardcount.png';
-import firebaseConfig from './cfg.js';
+import { firebaseConfig, gamehost } from './cfg.js';
 import { useInterval } from './chooks.js';
 
 
@@ -18,22 +18,41 @@ const fbase = firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth()
 const firestore = firebase.firestore()
 
+function GamehostStatus(props) {
+  const [ status, setStatus ] = useState(false)
+  const updateStatus = async () => {
+    const resp = await fetch(gamehost).then(obj=>{
+      if (!obj.ok) setStatus(false)
+      else setStatus(true)
+    }).catch(err=>{
+      setStatus(false)
+    });
+  }
+  useEffect(() => { updateStatus() }, []);
+  return ( <React.Fragment>
+    <div className="statusbox">
+      Gamehost - <span style={{fontWeight: "bold"}}>{status ? "Online" : "Offline"}</span>
+    </div>
+  </React.Fragment>
+  )
+}
+
 function Dialog(props) {
   return (
-    <div className="dialog" style={props.gd ? {} : {display: "none"}}>
-      {props.gd}
+    <div className="dialog" style={props.gd ? {opacity: "1"} : {top: "-40vh", opacity: "0"}}>
+      <div style={{flexGrow: "10"}}> {props.gd} </div>
       <button className="closedialog" onClick={()=>props.sd(null)}>Ok</button>
     </div>
   );
 }
 
 function CardVis(props) {
-  const [ selected, setSelect ] = useState(false)
+  const [ selected, setSelect ] = useState(false);
   return (
     <div className={"crdcontainer" + (props.selected ? " selectborder" : "")} style={{
-      left: String(props.handindex*10) + "%", 
-      bottom: props.selected ? "20px" : "0px"
-    }} onClick={()=>{
+      left: props.hpos, 
+      bottom: props.selected ? "5%" : "0%"
+    }} value={props.type} onClick={()=>{
       props.onClick(props.type);
     }}>
       <img src={cards[props.type]} className="card" />
@@ -42,11 +61,15 @@ function CardVis(props) {
 }
 
 function Talon(props) {
-  var cnt = 0;
+  var cnt = 1;
+  const dff = (window.innerWidth >= 600 ? 17.5 : 21) / 2;
   return (
       <div className="talon-grid">
         {props.data && props.data.map(
-          crd => <CardVis key={cnt} type={crd} selected={(props.selectedTalon.indexOf(crd) !== -1)} handindex={cnt++} onClick={() => {var k = props.selectedTalon.slice();
+          crd => <CardVis key={cnt} type={crd} selected={(props.selectedTalon.indexOf(crd) !== -1)} hpos={
+            "calc(" + String(((cnt++) / (props.data.length + 1) * 100).toPrecision(4)) + "% - " + String(dff) + (window.innerWidth >= 600 ? "vh)" : "vw)")
+          } onClick={() => {
+            var k = props.selectedTalon.slice();
             if (k.indexOf(crd) === -1) k.push(crd);
             else k.splice(k.indexOf(crd), 1);
             props.selectTalon(k);
@@ -58,10 +81,16 @@ function Talon(props) {
 
 function Hand(props) {
   var cindex = 0;
+  const wd = (window.innerWidth >= 600 ? 17.5 : 21);
+  const hpos = props.data && 50-wd-2.5*(props.data.length-1);
   return (
-    <div className="player-hand">
+    <div className="player-hand" style={{ width: String(wd + 5*(props.data.length-1)) + "vw", left: String(hpos) + "vw"}}>
       {props.data && props.data.map( crd =>
-        <CardVis key={cindex} type={crd} selected={(props.selectedHand === crd)} handindex={cindex++} onClick={props.selectHand} st={props.selectedHand}/>
+        <CardVis key={cindex} type={crd} selected={(props.selectedHand === crd)} 
+        hpos={
+          String((cindex++) * 5) + "vw"
+        }
+        onClick={props.selectHand} st={props.selectedHand}/>
       )}
     </div>
   )
@@ -69,15 +98,19 @@ function Hand(props) {
 
 function Game(props) {
   const game = firestore.collection('rooms').doc(props.gameID);
-  const [ handHighlights, selectHand ] = useState(null);
-  const [ talonHighlights, selectTalon ] = useState(Array(0));
+  const [ selectedHand, selectHand ] = useState(null);
+  const [ selectedTalon, selectTalon ] = useState(Array(0));
+  const [ selectedElements, setSelectedElements] = useState(Array(0));
   const [ dialogMessage, setDialog ] = useState(null);
   const [ gameState, loading, error ] = useDocumentData(game);
   const [ time, setTime ] = useState(0);
-  const [ timerSpeed, setSpeed] = useState(null);
-  var playerIndex, yourHand, isYourTurn;
+  const [ timerSpeed, setSpeed ] = useState(null);
+  const [ cAnimation, setAnimation ] = useState(null);
+  const [ animationCount, setAnimationCount ] = useState(0);
 
-  if (gameState && !loading && !error) {
+  var playerIndex, yourHand, isYourTurn;
+  if (gameState && !loading && !error && auth.currentUser) {
+
     playerIndex = gameState.players.indexOf(auth.currentUser.uid);
     switch (playerIndex) {
       case 0:
@@ -100,24 +133,24 @@ function Game(props) {
   
   const sendAction = async () => {
     console.log("Sending action!")
-    const card = handHighlights;
-    // Check to see which items in talonHighlights are still there
-    for (var i = 0; i < talonHighlights.length; i++) {
-      if (gameState.talon.indexOf(talonHighlights[i]) === -1) {
-        talonHighlights.splice(i, 1);
+    const card = selectedHand;
+    // Check to see which items in selectedTalon are still there
+    for (var i = 0; i < selectedTalon.length; i++) {
+      if (gameState.talon.indexOf(selectedTalon[i]) === -1) {
+        selectedTalon.splice(i, 1);
         i--;
       }
     }
-    const actiontype = talonHighlights.length == 0 ? "play" : "capture";
-    if (!handHighlights) {
+    const actiontype = selectedTalon.length == 0 ? "play" : "capture";
+    if (!selectedHand) {
       setDialog("Select a card to play first!");
     }
-    if (!verifyCap(talonHighlights.map(crd => (new Card(crd)).value()), (new Card(handHighlights)).value())) {
+    if (!verifyCap(selectedTalon.map(crd => (new Card(crd)).value()), (new Card(selectedHand)).value())) {
       setDialog("Invalid Card Combination!")
       selectTalon(Array(0))
       return;
     }
-    await fetch("/gamehost", {
+    await fetch(gamehost, {
       method: "POST",
       headers: {
         "userid": auth.currentUser.uid,
@@ -128,7 +161,7 @@ function Game(props) {
         datatype: "turn",
         type: actiontype,
         card: card,
-        captures: talonHighlights
+        captures: selectedTalon
       })
     }).then(async (response)=> {
       selectHand(null)
@@ -142,15 +175,11 @@ function Game(props) {
       setDialog("An unexpected error occurred while sending.")
     });
   };
-  // Implement Game Timer - After a turn change, set a timer.
-  // After the timer expires, send a request to the server basically asking to get on with the game
-  // For the person whose turn it is, instead send a random play card action.
-  // and is removed from the game.
 
   const requestUpdate = async () => {
     console.log("Sending update!")
     if (playerIndex == gameState.turn) {
-      await fetch("/gamehost", {
+      await fetch(gamehost, {
         method: "POST",
         headers: {
           "userid": auth.currentUser.uid,
@@ -175,7 +204,7 @@ function Game(props) {
         setDialog("An unexpected error occurred while sending.")
       });
     } else {
-      await fetch("/gamehost", {
+      await fetch(gamehost, {
         method: "POST",
         headers: {
           "userid": auth.currentUser.uid,
@@ -195,7 +224,10 @@ function Game(props) {
         setDialog("An unexpected error occurred while sending.")
       });
     }
-  }
+  };
+
+  const handleTurnAnimation = () => {
+  };
 
   useEffect(()=> {
     console.log("TURN UPDATE - " + String(gameState && gameState.turn));
@@ -206,7 +238,7 @@ function Game(props) {
     else {
       setSpeed(null);
     }
-  }, [gameState && gameState.turn, gameState && gameState.players])
+  }, [gameState && gameState.turn, gameState && gameState.players]);
 
   useInterval(async ()=> { // Credit to Dan Abramov (https://overreacted.io/) for this
     if (time <= 0) {
@@ -221,55 +253,87 @@ function Game(props) {
     }
   }, timerSpeed);
 
-  if (gameState && !loading && !error) {
+  // useEffect for handling complex animations. Set animations by using setAnimation. Animations can't be stopped once started.
+  useEffect(() => {
+    if (cAnimation == null) return;
+    setAnimationCount(animationCount+1);
+    let start = performance.now();
+    const obj = cAnimation;
+    requestAnimationFrame(function animate(time) {
+      // timeFraction goes from 0 to 1
+      let timeFraction = (time - start) / obj.duration;
+      if (timeFraction > 1) timeFraction = 1;
+
+      obj.draw(timeFraction); // draw it
+
+      if (timeFraction < 1) {
+        requestAnimationFrame(animate);
+        return;
+      }
+      setAnimationCount(animationCount - 1);
+    });
+  }, [cAnimation]);
+
+  if (!auth.currentUser) {
+    return (<React.Fragment>
+      An unexpected error occurred - GAME component.
+    </React.Fragment>)
+  }
+  if (gameState) {
     return (
       gameState.started ? (
         <React.Fragment>
-        <Dialog gd={dialogMessage} sd={setDialog} />
-        <Hand data={yourHand} selectHand={selectHand} selectedHand={handHighlights}/>
-        <button className="pushaction" onClick={()=>sendAction()}>Play/Capture</button>
+          <Dialog gd={dialogMessage} sd={setDialog} />
+          <Hand data={yourHand} selectHand={selectHand} selectedHand={selectedHand}/>
+          <button className="pushaction" onClick={()=>sendAction()}>{ selectedTalon.length === 0 ? "Play" : "Capture"}</button>
 
-        <div className="north player" pid={String(playerIndex+1)%2}>
-          <b>{gameState.playernames[(playerIndex+1)%2]}</b>
-          <div className="pointcounter">
-            {gameState.points[(playerIndex+1)%2]} PTS
+          <div className="north player" pid={String(playerIndex+1)%2}>
+            <b>{gameState.playernames[(playerIndex+1)%2]}</b>
+            <div className="pointcounter">
+              {gameState.points[(playerIndex+1)%2]} PTS
+            </div>
+            <div className="cardcount">
+              {playerIndex == 0 ? gameState.p2hand.length : gameState.p1hand.length}
+              <img src={cardcount} height="15" className="cardDisplay" />
+            </div>
           </div>
-          <div className="cardcount">
-            {playerIndex == 0 ? gameState.p2hand.length : gameState.p1hand.length}
-            <img src={cardcount} height="15" className="cardDisplay" />
-          </div>
-        </div>
 
-        <div className="south player" pid={String(playerIndex)}>
-          <b>{gameState.playernames[playerIndex]}</b>
-          <div className="pointcounter">
-            {gameState.points[playerIndex]} PTS
+          <div className="south player" pid={String(playerIndex)}>
+            <b>{gameState.playernames[playerIndex]}</b>
+            <div className="pointcounter">
+              {gameState.points[playerIndex]} PTS
+            </div>
+            <div className="cardcount">
+              {playerIndex == 0 ? gameState.p1hand.length : gameState.p2hand.length}
+              <img src={cardcount} height="15" className="cardDisplay" />
+            </div>
           </div>
-          <div className="cardcount">
-            {playerIndex == 0 ? gameState.p1hand.length : gameState.p2hand.length}
-            <img src={cardcount} height="15" className="cardDisplay" />
+
+          <Talon className="talon" data={gameState.talon} selectTalon={selectTalon} selectedTalon={selectedTalon} />
+          
+          <div className={"turnindicator" + (isYourTurn ? " current" : "")} >
+            {isYourTurn ? "Your" : gameState.playernames[gameState.turn] + "'s"} turn
           </div>
-        </div>
+          
+          <div className={"turntimer" + (isYourTurn ? " current" : "")}>
+            {time}
+          </div>
 
-        <Talon className="talon" data={gameState.talon} selectTalon={selectTalon} selectedTalon={talonHighlights} />
-        
-        <div className={"turnindicator" + (isYourTurn ? " current" : "")} >
-          {isYourTurn ? "Your" : gameState.playernames[gameState.turn] + "'s"} turn
-        </div>
-        
-        <div className={"turntimer" + (isYourTurn ? " current" : "")}>
-          {time}
-        </div>
-
+        </React.Fragment>
+      ) : <RoomStart gameID={props.gameID} setGame={props.setGame}/>
+    );
+  } else if (!error) { return (
+      <React.Fragment>
+        <div style={{transform: "translateY(50vh)"}}>LOADING...</div>
+        <button className="closedialog" style={{transform: "translateY(50vh)"}} onClick={()=>props.setGame(null)}>Return to menu</button>
       </React.Fragment>
-    ) : (
-      <RoomStart gameID={props.gameID} setGame={props.setGame}/>
-    )
-  );
-  } else {
+    )} else {
     return (
       <React.Fragment>
-        <div>An unexpected error occurred while loading.</div>
+        <div className="dialog">
+          <div style={{transform: "translateY(50vh)"}}>An unexpected error occurred while loading.</div>
+          <button className="closedialog" style={{transform: "translateY(50vh)"}} onClick={()=>props.setGame(null)}>Return to menu</button>
+        </div>
       </React.Fragment>
     );
   }
@@ -357,14 +421,25 @@ function RoomSelect(props) {
     });
   };
 
+  if (!rooms) {
+    return (<React.Fragment>
+      An unexpected error occurred - ROOMSELECT component.
+    </React.Fragment>)
+  }
+  var rmav = (!rooms.empty) ? (rooms.docs).map(rm => rm.id == "userfield" ? null : (<RoomOption key={rm.id} join={async() => joinRoom(rm.id)} rm={rm} />)) : (<div style={{
+    fontSize: "15px",
+    fontStyle: "italic",
+    margin: "10px"
+  }}>There are currently no available rooms. Create one yourself, or check back later.</div>);
   return (
     <React.Fragment>
+      <GamehostStatus />
       <h1>
         Welcome, {user ? user.displayName : "Anonymous"}!
       </h1>
       <h2>Available Rooms...</h2>
       <Dialog gd={dialog} sd={setDialog} />
-      { rooms && (rooms.docs).map(rm => <RoomOption join={async() => joinRoom(rm.id)} rm={rm} />)}
+      {rmav}
       <button onClick={()=>auth.signOut()}>Sign Out</button>
       <button onClick={createGame}>Create New Game</button>
 
@@ -420,12 +495,12 @@ function RoomStart(props) {
     });
     if (playercount === 0) game.delete().then(()=>props.setGame(null))
     else props.setGame(null)
-
   }
 
   if (gameState && !loading && !error) {
     return (
       <React.Fragment>
+        <GamehostStatus/>
         <h1> { gameState.roomname } </h1>
         { gameState.winner && 
           <h2> 
@@ -436,9 +511,13 @@ function RoomStart(props) {
             <span style={{fontWeight: "normal"}}> points!</span>
           </h2>
         }
-        <ul>
-          {gameState.playernames.map(name => <li key={name}>{name}</li>)}
-        </ul>
+        <div style={{fontWeight: "bold", margin: "10px"}}>Players:</div>
+        {gameState.playernames.map(name => (
+          <div key={name} className="rbwrapper" style={{
+            backgroundColor: "white"
+          }}>{name}</div>
+        ))}
+
         <button onClick={startGame}>Start Game</button>
         <button onClick={leaveGame}>Leave Game</button>
         <div> {dialogMessage} </div>
@@ -456,6 +535,11 @@ function RoomOption(props) {
   const data = props.rm.data()
   const isProtected = data["password"] === "";
   const nojoin = (data["started"] || data["playercount"] >= 2) && data["players"].indexOf(auth.currentUser.uid) === -1;
+  if (!auth.currentUser) {
+    return (<React.Fragment>
+      An unexpected error occurred - ROOMOPTION component.
+    </React.Fragment>)
+  }
   return (
     <React.Fragment>
       <div className="rbwrapper">

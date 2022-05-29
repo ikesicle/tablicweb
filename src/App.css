@@ -1,43 +1,58 @@
+@keyframes border-dance {
+  0% {
+    background-position: 0px 0px, 0px 100%, 0px 0px, 100% 0px;
+  }
+  100% {
+    background-position: 30px 0px, -30px 100%, 0px -30px, 100% 30px;
+  }
+}
+
+@keyframes card-creation {
+  from {
+    transform: translateY(20vh);
+  }
+  to {
+    transform: translate(0,0);
+  }
+}
+
+@keyframes room-button-creation {
+  from {
+    transform: translateX(-30vh);
+    opacity: 0;
+  }
+  to {
+    transform: translate(0,0);
+    opacity: 1;
+  }
+}
+
+button {
+  cursor: pointer;
+  background-color: lightgray;
+  color: black;
+  font-weight: bold;
+  transition: 0.3s;
+}
+
+button:hover {
+  background-color: white;
+}
 
 .App {
   text-align: center;
+  overflow: hidden;
+  height: 100vh;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.statusbox {
+  position: fixed;
+  left: 5vw;
+  top: 5vh;
+  height: 1em;
+  padding: 0.5em;
+  border: gray solid 1px;
 }
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
-}
-
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .card {
   position: absolute;
   height: 100%;
@@ -47,10 +62,12 @@
 
 .talon-grid {
   position: absolute;
-  height: 30%;
-  width: 40%;
-  top:30%;
-  left:40%;
+  height: 30vh;
+  width: 100vw;
+  top: 25vh;
+  left: 0;
+  transition: 0.3s;
+  background-color: gray;
 }
 
 .player-hand {
@@ -58,7 +75,7 @@
   height: 30%;
   width: 40%;
   bottom: 0;
-  left: 40%;
+  left: 30%;
 }
 
 .selectborder[hide]::before {
@@ -81,23 +98,14 @@
   animation: border-dance 2s infinite linear;
 }
 
-@keyframes border-dance {
-  0% {
-    background-position: 0px 0px, 0px 100%, 0px 0px, 100% 0px;
-  }
-  100% {
-    background-position: 30px 0px, -30px 100%, 0px -30px, 100% 30px;
-  }
-}
-
 .crdcontainer {
-  width: auto;
   position: absolute;
-  height: 25vh;
-  width: 17.5vh; /* Fixed calculated */
-  transition: 0.2s;
+  height: 30vw;
+  width: 21vw; /* Fixed calculated */
+  transition: 0.4s;
   cursor: grab;
   border: 1px black solid;
+  animation: card-creation 0.4s ease-out;
 }
 
 .crdcontainer:hover {
@@ -107,8 +115,9 @@
 
 .dialog {
   position: absolute;
-  left: 30vw;
-  right: 30vw;
+  display: flex;
+  flex-direction: column;
+  left: 15vw;
   top: 40vh;
   bottom: 40vh;
   z-index: 2;
@@ -119,48 +128,55 @@
   border-radius: 5px;
   height: 20vh;
   width: 40vh;
+  transition: 0.5s ease;
 }
 
 .closedialog {
+  display: block;
+  width: 50%;
   margin-left: auto;
   margin-right: auto;
+  margin-bottom: 5%;
+  background-color: lightgray;
+  color: black;
+  font-weight: bold;
+}
+
+.closedialog:hover {
+  background-color: white;
 }
 
 .player {
   text-align: left;
   border: 2px dashed gray;
-  position: absolute;
+  position: fixed;
   width: 100px;
   height: 100px;
 }
 
 .north {
-  left: 10%;
-  top: 10%;
+  left: 5%;
+  top: 7%;
 }
 .south {
-  bottom: 10%;
-  right: 10%;
+  bottom: 7%;
+  right: 5%;
 }
 
 .pushaction {
   position: absolute;
-  bottom: 35vh;
-  width: 20vw;
-  left: 40vw;
-  border: 0px solid transparent;
+  bottom: 28vh;
+  width: 30vw;
+  left: 35vw;
+  border: 1px solid transparent;
   transition: 0.5s;
 }
 
 .pushaction:hover {
-  width: 30vw;
-  left: 35vw;
   background: white;
-  cursor: pointer;
 }
 
 .roombutton {
-  cursor: pointer;
   border: 2px dashed black;
   text-align: left;
   height: 100px;
@@ -215,6 +231,7 @@
   width: 80%;
   margin: auto;
   margin-bottom: 10px;
+  animation: room-button-creation 0.4s ease-out;
 }
 
 .turnindicator {
@@ -239,4 +256,26 @@
   color: black;
 }
 
+@media only screen and (min-width: 600px) {
+  .crdcontainer {
+    height: 25vh;
+    width: 17.5vh;
+  }
 
+  .pushaction {
+    bottom: 35vh;
+  }
+
+  .talon-grid {
+    top: 30vh;
+  }
+
+  .north {
+    left: 10%;
+    top: 10%;
+  }
+  .south {
+    right: 10%;
+    bottom: 10%;
+  }
+}
