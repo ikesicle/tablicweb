@@ -21,7 +21,7 @@ const firestore = firebase.firestore()
 function GamehostStatus(props) {
   const [ status, setStatus ] = useState(false)
   const updateStatus = async () => {
-    const resp = await fetch(gamehost).then(obj=>{
+    const resp = await fetch(gamehost, {headers: {"Origin": window.location.href}}).then(obj=>{
       if (!obj.ok) setStatus(false)
       else setStatus(true)
     }).catch(err=>{
@@ -155,7 +155,8 @@ function Game(props) {
       headers: {
         "userid": auth.currentUser.uid,
         "gameid": props.gameID,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Origin": window.location.href
       },
       body: JSON.stringify({
         datatype: "turn",
@@ -184,7 +185,8 @@ function Game(props) {
         headers: {
           "userid": auth.currentUser.uid,
           "gameid": props.gameID,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Origin": window.location.href
         },
         body: JSON.stringify({
           datatype: "turn",
@@ -209,7 +211,8 @@ function Game(props) {
         headers: {
           "userid": auth.currentUser.uid,
           "gameid": props.gameID,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Origin": window.location.href
         },
         body: JSON.stringify({
           datatype: "update"

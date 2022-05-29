@@ -10,6 +10,7 @@ from cfg import config
 import os
 from datetime import datetime, timedelta, timezone
 from waitress import serve
+from flask_cors import CORS as cors
 
 path = os.path.dirname(os.path.abspath(__file__))
 
@@ -20,6 +21,7 @@ fstore = firestore.client()
 rooms = fstore.collection("rooms")
 
 app = Flask(__name__)
+cors(app)
 
 """
 logging.basicConfig(
@@ -45,13 +47,11 @@ async def gamehost():
     resp = make_response(msg)
     resp.status_code = code
     resp.headers["content-type"] = "text/plain"
-    resp.headers["Access-Control-Allow-Origin"] = "https://tablicweb.web.app"
     return resp
 
   okReq = make_response("OK")
   okReq.status_code = 200
   okReq.headers["content-type"] = "text/plain"
-  okReq.headers["Access-Control-Allow-Origin"] = "https://tablicweb.web.app"
   
   if request.method == "POST":
     userid = request.headers["userid"]
