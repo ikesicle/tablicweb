@@ -13,7 +13,7 @@
 # limitations under the License.
 
 runtime: python39
-entrypoint: waitress-serve --port=$PORT server:app
+entrypoint: python server.py
 
 # This sample incurs costs to run on the App Engine flexible environment. 
 # The settings below are to reduce costs during testing and are not appropriate

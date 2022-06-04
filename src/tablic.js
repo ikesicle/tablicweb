@@ -1,16 +1,18 @@
 const faces = [ "Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King" ];
-const suits = [ "Hearts", "Clubs", "Diamonds", "Spades" ];
+const suits = [ "Clubs", "Hearts", "Spades", "Diamonds"];
 const NUMBER_OF_CARDS = 52;
 const faceabbrs = [ "A", "2", "3", "4", "5", "6", "7", "8", "9", "0", "J", "Q", "K" ];
 const suitabbrs = [ "1", "2", "3", "4" ]
+const SPECIAL_CARDS = {
+  "12": 2,
+  "40": 2
+};
 
 function verifyCap(crds, capval) {
-  console.log(`Verifying capture of [${crds}] with [${capval}]`)
-
   if (Math.max(crds) > capval) {
     return false;
   }
-  if (crds.length == 0) return true;
+  if (crds.length === 0) return true;
   var k;
   // TODO: Currently does not account for aces possibly having a value of 11
   var crdsclone = crds.slice();
@@ -30,15 +32,13 @@ function verifyCap(crds, capval) {
     while (crds.length > 0) {
         k = findCombo(crds.slice(), capval);
         if (!k) {pass = false; break}
-        k.forEach(value => {
-          crds.splice(crds.indexOf(value),1);
-        });
+
+        for (let j = 0; j < k.length; j++) crds.splice(crds.indexOf(k[j]),1);
     }
 
     if (pass) return true;
   }
-  if (capval == 1) {
-    console.log("Reverifiying with 11")
+  if (capval === 1) {
     capval = 11
     crdsclone = crdsorig.slice();
     initcheck = true;
@@ -54,9 +54,7 @@ function verifyCap(crds, capval) {
       while (crds.length > 0) {
           k = findCombo(crds.slice(), capval);
           if (!k) {pass = false; break}
-          k.forEach(value => {
-            crds.splice(crds.indexOf(value),1);
-          });
+          for (let j = 0; j < k.length; j++) crds.splice(crds.indexOf(k[j]),1);
       }
       if (pass) return true;
     }
@@ -117,11 +115,9 @@ class Deck {
   constructor() {
     this.deck = new Array(NUMBER_OF_CARDS).fill(null);
     for (var count = 0; count < this.deck.length; count++) this.deck[count] = new Card(suitabbrs[Math.floor(count / 13)]+faceabbrs[count % 13]);
-    console.log(this.deck.slice())
   }
 
   Shuffle() {
-    console.log("Shuffling...")
     for (var first = 0; first < this.deck.length; first++)
     {
       var second = ranNum(0,NUMBER_OF_CARDS);
@@ -129,7 +125,6 @@ class Deck {
       this.deck[first] = this.deck[second];
       this.deck[second] = temp;
     }
-    console.log(this.deck.slice())
   }
 
   DealCard(count) {
@@ -144,7 +139,10 @@ class Card {
       this.face = card[1];
       this.suit = card[0];
   }
+  
   toString() { return this.suit+this.face; }
+
+  static parse(str) { return faces[faceabbrs.indexOf(str[1])] + " of " + suits[suitabbrs.indexOf(str[0])]; }
 
   value() {
     let val = faceabbrs.indexOf(this.face);
@@ -152,4 +150,18 @@ class Card {
   }
 }
 
-export { verifyCap, Deck, Card, ranNum, faces, suits, NUMBER_OF_CARDS }
+function evaluatePoints(arr) {
+  var dp = 0;
+  arr.forEach((card) => {
+    if (card in SPECIAL_CARDS) {
+      dp += SPECIAL_CARDS[card];
+      return;
+    }
+    var cardval = card[1]
+    if (["A", "0", "J", "Q", "K"].indexOf(cardval) !== -1) dp++;
+  });
+  return dp
+}
+
+
+export { verifyCap, Deck, Card, ranNum, faces, suits, NUMBER_OF_CARDS, evaluatePoints }

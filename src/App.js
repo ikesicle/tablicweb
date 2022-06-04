@@ -1,156 +1,73 @@
-import logo from './logo.svg';
+import twlogo from './logo.png';
 import './App.css';
-import { verifyCap, Deck, Card, ranNum, faces, suits, NUMBER_OF_CARDS } from './tablic.js'
+import { Deck } from './tablic.js'
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 import 'firebase/compat/auth';
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { useDocumentData, useCollectionData, useCollection } from 'react-firebase-hooks/firestore';
-import { cards } from './cards.js';
-import cardcount from './cardcount.png';
-import { firebaseConfig, gamehost } from './cfg.js';
-import { useInterval } from './chooks.js';
-
-
+import { useDocumentData, useCollection } from 'react-firebase-hooks/firestore';
+import { firebaseConfig, server } from './cfg.js';
+import useInterval from './chooks.js';
+import { Dialog, GameRenderer } from './renderer.js';
+import Tutorial from './tutorial.js';
 // Initialize Firebase
-const fbase = firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth()
-const firestore = firebase.firestore()
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const firestore = firebase.firestore();
+const gamehost = server + "/gamehost";
 
 function GamehostStatus(props) {
-  const [ status, setStatus ] = useState(false)
+  const [ status, setStatus ] = useState(false);
+
   const updateStatus = async () => {
-    const resp = await fetch(gamehost, {headers: {"Origin": window.location.href}}).then(obj=>{
+    await fetch(gamehost, {
+      method: "GET",
+      headers: {
+        "Origin": window.location.href,
+        "Content-Type": "application/json"
+      }
+    }).then(async (obj) =>{
       if (!obj.ok) setStatus(false)
-      else setStatus(true)
+      else {
+        setStatus(true);
+      }
     }).catch(err=>{
-      setStatus(false)
+      setStatus(false);
     });
   }
-  useEffect(() => { updateStatus() }, []);
-  return ( <React.Fragment>
-    <div className="statusbox">
-      Gamehost - <span style={{fontWeight: "bold"}}>{status ? "Online" : "Offline"}</span>
+  useEffect(()=>{updateStatus()}, []);
+
+  if (!props.hidden) return ( <React.Fragment>
+    <div className="statusbox" style={{border: "2px solid", borderColor: status ? "green" : "red"}}>
+      Status: <span style={{fontWeight: "bold"}}>{status ? "Online" : "Offline"}</span>
     </div>
   </React.Fragment>
-  )
-}
-
-function Dialog(props) {
+  );
   return (
-    <div className="dialog" style={props.gd ? {opacity: "1"} : {top: "-40vh", opacity: "0"}}>
-      <div style={{flexGrow: "10"}}> {props.gd} </div>
-      <button className="closedialog" onClick={()=>props.sd(null)}>Ok</button>
-    </div>
+    <React.Fragment>
+    </React.Fragment>
   );
 }
 
-function CardVis(props) {
-  const [ selected, setSelect ] = useState(false);
-  return (
-    <div className={"crdcontainer" + (props.selected ? " selectborder" : "")} style={{
-      left: props.hpos, 
-      bottom: props.selected ? "5%" : "0%"
-    }} value={props.type} onClick={()=>{
-      props.onClick(props.type);
-    }}>
-      <img src={cards[props.type]} className="card" />
-    </div>
-  )
-}
-
-function Talon(props) {
-  var cnt = 1;
-  const dff = (window.innerWidth >= 600 ? 17.5 : 21) / 2;
-  return (
-      <div className="talon-grid">
-        {props.data && props.data.map(
-          crd => <CardVis key={cnt} type={crd} selected={(props.selectedTalon.indexOf(crd) !== -1)} hpos={
-            "calc(" + String(((cnt++) / (props.data.length + 1) * 100).toPrecision(4)) + "% - " + String(dff) + (window.innerWidth >= 600 ? "vh)" : "vw)")
-          } onClick={() => {
-            var k = props.selectedTalon.slice();
-            if (k.indexOf(crd) === -1) k.push(crd);
-            else k.splice(k.indexOf(crd), 1);
-            props.selectTalon(k);
-          }} />
-        )}
-      </div>
-    )
-}
-
-function Hand(props) {
-  var cindex = 0;
-  const wd = (window.innerWidth >= 600 ? 17.5 : 21);
-  const hpos = props.data && 50-wd-2.5*(props.data.length-1);
-  return (
-    <div className="player-hand" style={{ width: String(wd + 5*(props.data.length-1)) + "vw", left: String(hpos) + "vw"}}>
-      {props.data && props.data.map( crd =>
-        <CardVis key={cindex} type={crd} selected={(props.selectedHand === crd)} 
-        hpos={
-          String((cindex++) * 5) + "vw"
-        }
-        onClick={props.selectHand} st={props.selectedHand}/>
-      )}
-    </div>
-  )
-}
-
-function Game(props) {
+function NetworkGame(props) {
   const game = firestore.collection('rooms').doc(props.gameID);
-  const [ selectedHand, selectHand ] = useState(null);
-  const [ selectedTalon, selectTalon ] = useState(Array(0));
-  const [ selectedElements, setSelectedElements] = useState(Array(0));
   const [ dialogMessage, setDialog ] = useState(null);
   const [ gameState, loading, error ] = useDocumentData(game);
   const [ time, setTime ] = useState(0);
   const [ timerSpeed, setSpeed ] = useState(null);
-  const [ cAnimation, setAnimation ] = useState(null);
-  const [ animationCount, setAnimationCount ] = useState(0);
+  const [ spectatorView ] = useState(0);
 
-  var playerIndex, yourHand, isYourTurn;
+  var playerIndex, yourHand, spectator = false;
   if (gameState && !loading && !error && auth.currentUser) {
-
     playerIndex = gameState.players.indexOf(auth.currentUser.uid);
-    switch (playerIndex) {
-      case 0:
-        yourHand = gameState.p1hand;
-        break;
-      case 1:
-        yourHand = gameState.p2hand;
-        break;
-      case 2:
-        yourHand = gameState.p3hand;
-        break;
-      case 3:
-        yourHand = gameState.p4hand;
-        break;
-      default:
-        yourHand = [];
-    }
-    isYourTurn = playerIndex == gameState.turn;
+    if (playerIndex === -1) { playerIndex = spectatorView; spectator = true; }
+    yourHand = gameState["p" + String(playerIndex + 1) + "hand"];
   }
   
-  const sendAction = async () => {
-    console.log("Sending action!")
-    const card = selectedHand;
-    // Check to see which items in selectedTalon are still there
-    for (var i = 0; i < selectedTalon.length; i++) {
-      if (gameState.talon.indexOf(selectedTalon[i]) === -1) {
-        selectedTalon.splice(i, 1);
-        i--;
-      }
-    }
-    const actiontype = selectedTalon.length == 0 ? "play" : "capture";
-    if (!selectedHand) {
-      setDialog("Select a card to play first!");
-    }
-    if (!verifyCap(selectedTalon.map(crd => (new Card(crd)).value()), (new Card(selectedHand)).value())) {
-      setDialog("Invalid Card Combination!")
-      selectTalon(Array(0))
-      return;
-    }
-    await fetch(gamehost, {
+  // Client-side verification can be done with the Game object; firing off the game requires a bit more work.
+  const sendAction = (actiontype, card, selectedTalon) => {
+    fetch(gamehost, {
       method: "POST",
       headers: {
         "userid": auth.currentUser.uid,
@@ -165,21 +82,17 @@ function Game(props) {
         captures: selectedTalon
       })
     }).then(async (response)=> {
-      selectHand(null)
-      selectTalon(Array(0))
-      if (response.status !== 200) {
-        setDialog(await response.text());
-      }
+      if (response.status !== 200) setDialog(await response.text());
       else setDialog(null);
     }).catch((err)=>{
-      console.log("Problem with sending Data to home servers: " + String(err))
       setDialog("An unexpected error occurred while sending.")
     });
   };
 
+  // Requesting the update requires hand data. Must be done completely in here.
   const requestUpdate = async () => {
-    console.log("Sending update!")
-    if (playerIndex == gameState.turn) {
+    if (spectator) return;
+    if (playerIndex === gameState.turn) {
       await fetch(gamehost, {
         method: "POST",
         headers: {
@@ -195,8 +108,6 @@ function Game(props) {
           captures: []
         })
       }).then(async (response)=> {
-        selectHand(null)
-        selectTalon(Array(0))
         if (response.status !== 200) {
           setDialog(await response.text());
         }
@@ -229,11 +140,7 @@ function Game(props) {
     }
   };
 
-  const handleTurnAnimation = () => {
-  };
-
   useEffect(()=> {
-    console.log("TURN UPDATE - " + String(gameState && gameState.turn));
     if (gameState && gameState.started) {
       setTime("--");
       setSpeed(100);
@@ -241,6 +148,7 @@ function Game(props) {
     else {
       setSpeed(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState && gameState.turn, gameState && gameState.players]);
 
   useInterval(async ()=> { // Credit to Dan Abramov (https://overreacted.io/) for this
@@ -256,78 +164,24 @@ function Game(props) {
     }
   }, timerSpeed);
 
-  // useEffect for handling complex animations. Set animations by using setAnimation. Animations can't be stopped once started.
-  useEffect(() => {
-    if (cAnimation == null) return;
-    setAnimationCount(animationCount+1);
-    let start = performance.now();
-    const obj = cAnimation;
-    requestAnimationFrame(function animate(time) {
-      // timeFraction goes from 0 to 1
-      let timeFraction = (time - start) / obj.duration;
-      if (timeFraction > 1) timeFraction = 1;
-
-      obj.draw(timeFraction); // draw it
-
-      if (timeFraction < 1) {
-        requestAnimationFrame(animate);
-        return;
-      }
-      setAnimationCount(animationCount - 1);
-    });
-  }, [cAnimation]);
-
   if (!auth.currentUser) {
     return (<React.Fragment>
       An unexpected error occurred - GAME component.
     </React.Fragment>)
   }
+
   if (gameState) {
-    return (
-      gameState.started ? (
+    if (gameState.started) {
+      return (
         <React.Fragment>
-          <Dialog gd={dialogMessage} sd={setDialog} />
-          <Hand data={yourHand} selectHand={selectHand} selectedHand={selectedHand}/>
-          <button className="pushaction" onClick={()=>sendAction()}>{ selectedTalon.length === 0 ? "Play" : "Capture"}</button>
-
-          <div className="north player" pid={String(playerIndex+1)%2}>
-            <b>{gameState.playernames[(playerIndex+1)%2]}</b>
-            <div className="pointcounter">
-              {gameState.points[(playerIndex+1)%2]} PTS
-            </div>
-            <div className="cardcount">
-              {playerIndex == 0 ? gameState.p2hand.length : gameState.p1hand.length}
-              <img src={cardcount} height="15" className="cardDisplay" />
-            </div>
-          </div>
-
-          <div className="south player" pid={String(playerIndex)}>
-            <b>{gameState.playernames[playerIndex]}</b>
-            <div className="pointcounter">
-              {gameState.points[playerIndex]} PTS
-            </div>
-            <div className="cardcount">
-              {playerIndex == 0 ? gameState.p1hand.length : gameState.p2hand.length}
-              <img src={cardcount} height="15" className="cardDisplay" />
-            </div>
-          </div>
-
-          <Talon className="talon" data={gameState.talon} selectTalon={selectTalon} selectedTalon={selectedTalon} />
-          
-          <div className={"turnindicator" + (isYourTurn ? " current" : "")} >
-            {isYourTurn ? "Your" : gameState.playernames[gameState.turn] + "'s"} turn
-          </div>
-          
-          <div className={"turntimer" + (isYourTurn ? " current" : "")}>
-            {time}
-          </div>
-
+          <Chat gameStarted={true} isSpectator={spectator} game={game} context={"ingame"}/>
+          <GameRenderer gameState={gameState} spectating={spectator} onPlay={sendAction} playerID={playerIndex} time={time} getDialog={dialogMessage} setDialog={setDialog}/>
         </React.Fragment>
-      ) : <RoomStart gameID={props.gameID} setGame={props.setGame}/>
-    );
+      )
+    } else return <RoomStart gameID={props.gameID} setGame={props.setGame} isSpectator={spectator}/>
   } else if (!error) { return (
       <React.Fragment>
-        <div style={{transform: "translateY(50vh)"}}>LOADING...</div>
+        <div style={{transform: "translateY(50vh)"}}>Loading...</div>
         <button className="closedialog" style={{transform: "translateY(50vh)"}} onClick={()=>props.setGame(null)}>Return to menu</button>
       </React.Fragment>
     )} else {
@@ -344,45 +198,148 @@ function Game(props) {
 
 function Login(props) {
   const [formValue, setFormValue] = useState('');
-
+  const [dialog, setDialog] = useState(null);
   const login = async (e) => {
     e.preventDefault();
+    if (formValue.length > 15) {
+      setDialog("Name must be 15 letters or less.");
+      return;
+    }
     auth.signInAnonymously();
     auth.onAuthStateChanged(user => {
-      console.log("Auth state changed.")
       if (user) {
         user.updateProfile({
           displayName: formValue
         })
-        console.log("Display name set.")
+        props.setter(formValue)
       }
     })
   }
+  
   return (
     <React.Fragment>
+      <Dialog gd={dialog} sd={setDialog} />
+      <GamehostStatus hidden={false} />
+      <img src={twlogo} alt="Logo" className="applogo"></img>
       <form onSubmit={login}>
-        <input value={formValue} onChange={(e) => setFormValue(e.target.value)} placeholder="Display Name" />
-        <button type="submit" disabled={!formValue}>Login</button>
+        <input value={formValue} onChange={(e) => setFormValue(e.target.value)} placeholder="Display Name" style={{
+          height: "1.5em",
+          margin: "1.5em",
+          border: "1px solid black",
+          padding: "3px"
+        }} />
+        <button type="submit" disabled={!formValue} style={{
+          height: "2.1em",
+          padding: "3px"
+        }}>Login</button>
       </form>
+      <div className="credits">Made with care by Ike and Adam</div>
+    </React.Fragment>
+  )
+}
+
+function Chat(props) {
+  const gamechat = props.game.collection('chat');
+  var filter = gamechat.orderBy("timestamp", "desc");
+  filter = filter.limit(50);
+  const [ gamechatref, loading, error ] = useCollection(filter);
+  const [ messageValue, setMessage ] = useState("");
+  const [ user ] = useAuthState(auth)
+  const top = useRef(null);
+  const [ chatState, setChatState ] = useState(false);
+
+  const send = async (e) => {
+    e.preventDefault();
+    if (!messageValue) return;
+    await gamechat.add({
+      message: messageValue,
+      senderID: user.uid,
+      senderName: user.displayName,
+      timestamp: firebase.firestore.Timestamp.now(),
+      spectate: props.isSpectator
+    })
+    setChatState(true);
+    if (gamechatref.docs.length > 50) { // Message limit
+      await gamechat.doc(gamechatref.docs[0].id).delete()
+    }
+    setMessage("");
+    top.current.scrollIntoView({behavior: "smooth"});
+  }
+
+  const toggleOpenClose = (e) => {
+    setChatState(!chatState);
+  }
+
+  var ctr = -1;
+  var chat;
+  if (error) chat = "Unable to load chat.";
+  else if (loading) chat = "Loading...";
+  else {
+    chat = gamechatref.docs.map(msgref => {
+      ctr++;
+      var msg = msgref.data();
+      var senderstyle = {};
+
+      if (msg.spectate) {
+        // eslint-disable-next-line
+        if (!props.isSpectator && props.gameStarted) return;
+        senderstyle.color = "rgb(255,255,0)";
+      } else if (msg.senderID === "0") {
+        senderstyle.color = "white";
+        senderstyle.fontWeight = "bold";
+      } 
+      else if (msg.senderID === (user && user.uid)) {
+        senderstyle.color = "cyan";
+      }
+      else {
+        senderstyle.color = "lime";
+      }
+
+      return (
+        <React.Fragment key={msgref.id}>
+          <div className={"message" + (ctr === 0 ? " new" : "")}>
+             <span style={senderstyle}>{msg.senderName}: </span>
+             {msg.message}
+          </div>
+        </React.Fragment>
+      )
+    });
+  }
+
+  return (
+    <React.Fragment>
+      <div className={"chatarea "+props.context} >
+        <form className="chatform" onSubmit={send}>
+          <input type="text" className="chatinput" value={messageValue} onChange={e => setMessage(e.target.value)} placeholder="Type..." />
+          <input type="button" onClick={toggleOpenClose} value="Open/Close" />
+        </form>
+
+        <div className={"chatlogs "+props.context} style={chatState ? {} : {height: '0'}}>
+          <div ref={top}></div>
+          {chat}
+          <div className="message" style={{textAlign: "center"}}>-- End of records (30 most recent) --</div>
+          <div style={{height: "3vh"}}>------</div>
+        </div>
+      </div>
     </React.Fragment>
   )
 }
 
 function RoomSelect(props) {
   const roomlist = firestore.collection('rooms');
-  const [rooms] = useCollection(roomlist);
+  const [rooms, loadingRoom, roomError] = useCollection(roomlist);
   const [user] = useAuthState(auth);
   const [dialog, setDialog] = useState(null)
+  const [inTutorial, setTutorial] = useState(false);
   
   const joinRoom = async (rm) => {
     console.log(`Logging in to room '${rm}'`)
     const game = roomlist.doc(rm);
     const go = await game.get();
     const gamedata = go.data();
+    var msg = user.displayName + " is now spectating."
     if (user && gamedata) {
-      if (gamedata["playercount"] >= 2 && gamedata["players"].indexOf(user.uid) == -1) {
-        setDialog("Max players reached!")
-      } else if (gamedata["players"].indexOf(user.uid) == -1) {
+      if (gamedata["playercount"] < 4 && gamedata["players"].indexOf(user.uid) === -1 && !gamedata["started"]) {
         game.set({
           players: gamedata["players"].concat([user.uid]),
           playernames: gamedata["playernames"].concat([user.displayName]),
@@ -390,9 +347,26 @@ function RoomSelect(props) {
         }, {
           merge: true
         });
-        props.setGame(rm);
-      } else props.setGame(rm);
-      
+        msg = user.displayName + " has joined."
+        await game.collection('chat').add({
+          message: msg,
+          senderID: "0",
+          senderName: "[ System ]",
+          timestamp: firebase.firestore.Timestamp.now(),
+          spectate: false
+        });
+      }
+      else if (gamedata["players"].indexOf(user.uid !== -1)) {}
+      else if (gamedata) {
+        await game.collection('chat').add({
+          message: msg,
+          senderID: "0",
+          senderName: "[ System ]",
+          timestamp: firebase.firestore.Timestamp.now(),
+          spectate: false
+        });
+      }
+      props.setGame(rm);
     }
     else if (!(gamedata)) {
       setDialog("Unable to join.");
@@ -411,119 +385,312 @@ function RoomSelect(props) {
       playernames: [],
       players: [],
       points: Array(4).fill(0),
+      capturecount: Array(4).fill(0),
       roomname: user.displayName + "'s Room",
       started: false,
       talon: [],
       turn: 0,
       winner: "",
       password: "",
+      gamemode: "FFA",
+      teamdist: [0,0,0,0],
       roomcreator: user.displayName,
       date: null
     }).then(async (docRef) => {
+      console.log("Creating chat logs")
+      await docRef.collection('chat').add({
+        message: "Room created at " + String(firebase.firestore.Timestamp.now().toDate()),
+        senderID: "0",
+        senderName: "[ System ]",
+        timestamp: firebase.firestore.Timestamp.now(),
+        spectate: false
+      });
       await joinRoom(docRef.id);
     });
   };
 
-  if (!rooms) {
-    return (<React.Fragment>
+  var rmav;
+
+  if (roomError) {
+    rmav = (<React.Fragment>
       An unexpected error occurred - ROOMSELECT component.
     </React.Fragment>)
   }
-  var rmav = (!rooms.empty) ? (rooms.docs).map(rm => rm.id == "userfield" ? null : (<RoomOption key={rm.id} join={async() => joinRoom(rm.id)} rm={rm} />)) : (<div style={{
-    fontSize: "15px",
-    fontStyle: "italic",
-    margin: "10px"
-  }}>There are currently no available rooms. Create one yourself, or check back later.</div>);
-  return (
-    <React.Fragment>
-      <GamehostStatus />
-      <h1>
-        Welcome, {user ? user.displayName : "Anonymous"}!
-      </h1>
-      <h2>Available Rooms...</h2>
-      <Dialog gd={dialog} sd={setDialog} />
-      {rmav}
-      <button onClick={()=>auth.signOut()}>Sign Out</button>
-      <button onClick={createGame}>Create New Game</button>
-
-    </React.Fragment>)
+  else if (loadingRoom) {
+    rmav = (
+      <React.Fragment>
+        <div>LOADING...</div>
+      </React.Fragment>
+    )
+  }
+  else {
+    rmav = (rooms.docs.length > 1) ? rooms.docs.map(rm => rm.id === "userfield" ? null : (<RoomOption key={rm.id} join={async() => joinRoom(rm.id)} rm={rm} />)) : (<div style={{
+      fontSize: "15px",
+      fontStyle: "italic",
+      margin: "10px"
+    }}>There are currently no available rooms. Create one yourself, or check back later.</div>);
+  }
+  if (!inTutorial) {
+    return (
+      <React.Fragment>
+        <GamehostStatus hidden={false} />
+        <h1>
+          Welcome, {user ? (user.displayName || props.username) : "Anonymous"}!
+        </h1>
+        <button onClick={async () => {
+          props.setName(null);
+          await auth.currentUser.delete();
+        }}>Sign Out</button>
+        <button onClick={createGame}>Create New Game</button>
+        <button onClick={()=>{
+          setTutorial(true);
+        }}>How to play</button>
+        <h2>Available Rooms...</h2>
+        <Dialog gd={dialog} sd={setDialog} />
+        {rmav}
+      </React.Fragment>)
+  } else {
+    return (<Tutorial exit={()=>{
+      setTutorial(false);
+    }} user={user}/>)
+  }
 }
 
 function RoomStart(props) {
   const game = firestore.collection('rooms').doc(props.gameID);
-  const [ dialogMessage, setDialog ] = useState("");
+  const [ dialogMessage, setDialog ] = useState(null);
   const [ gameState, loading, error ] = useDocumentData(game);
+  const [ user ] = useAuthState(auth);
+  const spectator = gameState && gameState.players.indexOf(user.uid) === -1;
 
-  const startGame = () => {
-    if (gameState.playercount != 2) {
-      setDialog("Players must be equal to 2!");
+  var playerIndex = spectator ? -1 : (gameState ? gameState.players.indexOf(user.uid) : -1);
+
+  const startGame = async () => {
+    if (gameState.playercount <= 1) {
+      setDialog("You must have at least 2 players!");
       return;
     }
+
+    if (gameState.gamemode === "TEM") {
+      var blues = 0;
+      var reds = 0;
+      gameState.teamdist.forEach((elem)=>{
+        if (elem === 1) reds++;
+        else blues++;
+      });
+      if (blues === 0 || reds === 0) {
+        setDialog("Cannot have empty teams!");
+        return;
+      }
+    }
+
+    var connect = true;
+
+    await fetch(gamehost, {
+      method: "GET",
+      headers: {
+        "Origin": window.location.href,
+        "Content-Type": "application/json"
+      }
+    }).then(obj=>{
+      if (!obj.ok) {
+        setDialog("Gamehost is currently offline.");
+        connect = false;
+      }
+    }).catch(err=>{
+      setDialog("An error occurred when sending the server check: "+String(err));
+      connect = false;
+    });
+
+    if (!connect) return;
+
     const deck = new Deck();
     deck.Shuffle();
     const talon = deck.DealCard(4);
-    var p1hand = deck.DealCard(3);
-    var p2hand = deck.DealCard(3);
-    p1hand = p1hand.concat(deck.DealCard(3));
-    p2hand = p2hand.concat(deck.DealCard(3));
-    game.set({
+    var hands = [];
+    for (let i = 0; i < gameState.playercount; i++) hands.push(gameState.gamemode === "TEM" ? deck.DealCard(3) : deck.DealCard(6));
+
+    var initializer = {
       deck: deck.deck.map(crd => crd.toString()),
       talon: talon.map(crd => crd.toString()),
-      p1hand: p1hand.map(crd => crd.toString()),
-      p2hand: p2hand.map(crd => crd.toString()),
       points: [0,0,0,0],
+      capturecount: [0,0,0,0],
       started: true,
       turn: 0,
       lastPlay: "game start",
       date: firebase.firestore.Timestamp.now()
-    }, {
+    }
+
+    for (let i = 0; i < gameState.playercount; i++) initializer["p" + String(i+1) + "hand"] = hands[i].map(crd => crd.toString());
+
+    game.set(initializer, {
       merge: true
     });
-  }
+    await game.collection('chat').add({
+      message: "Game started. Player and spectator chats are now separate.",
+      senderID: "0",
+      senderName: "[ System ]",
+      timestamp: firebase.firestore.Timestamp.now(),
+      spectate: false
+    });
+  };
 
-  const leaveGame = () => {
+  const removeAsPlayer = async (message) => {
     let players = gameState.players.slice();
     let playernames = gameState.playernames.slice();
     let playercount = gameState.playercount;
-    players.splice(players.indexOf(auth.currentUser.uid),1);
-    playernames.splice(playernames.indexOf(auth.currentUser.displayName),1);
-    playercount --;
+    players.splice(players.indexOf(user.uid),1);
+    playernames.splice(playernames.indexOf(user.displayName),1);
+    playercount--;
 
+    if (gameState.gamemode === "TEM") {
+      await game.collection('chat').add({
+        message: "Gamemode is now set to Free For All (FFA).",
+        senderID: "0",
+        senderName: "[ System ]",
+        timestamp: firebase.firestore.Timestamp.now(),
+        spectate: false
+      });
+    }
     game.set({
       players: players,
       playernames: playernames,
-      playercount: playercount
+      playercount: playercount,
+      gamemode: "FFA",
+      teamdist: [0,0,0,0]
     }, {
       merge: true
     });
-    if (playercount === 0) game.delete().then(()=>props.setGame(null))
-    else props.setGame(null)
+    if (playercount === 0) {
+      var collection = await (game.collection('chat').get());
+      collection.forEach((snap) => snap.ref.delete());
+      game.delete();
+      props.setGame(null);
+    }
+    else {
+      await game.collection('chat').add({
+        message: message,
+        senderID: "0",
+        senderName: "[ System ]",
+        timestamp: firebase.firestore.Timestamp.now(),
+        spectate: false
+      });
+    }
+  };
+
+  const switchGame = async () => {
+    if (spectator) {
+      if (user && gameState) {
+        if (gameState.playercount < 4 && gameState.players.indexOf(user.uid) === -1) {
+          game.set({
+            players: gameState.players.concat([user.uid]),
+            playernames: gameState.playernames.concat([user.displayName]),
+            playercount: gameState.playercount + 1
+          }, {
+            merge: true
+          });
+          await game.collection('chat').add({
+            message: user.displayName + " is now a player!",
+            senderID: "0",
+            senderName: "[ System ]",
+            timestamp: firebase.firestore.Timestamp.now(),
+            spectate: false
+          });
+        }
+      }
+      else setDialog("An unexpected error occurred.")
+    } else await removeAsPlayer(user.displayName + " has joined the spectators' booth.");
+  };
+
+  const leaveGame = async () => {
+    props.setGame(null)
+    if (props.isSpectator) {
+      await game.collection('chat').add({
+        message: user.displayName + " has left the spectator's booth.",
+        senderID: "0",
+        senderName: "[ System ]",
+        timestamp: firebase.firestore.Timestamp.now(),
+        spectate: false
+      });
+      return;
+    }
+    await removeAsPlayer(user.displayName + " has left.");
+  };
+
+  const toggleGamemode = async () => {
+    var settings = {}
+    if (gameState.gamemode === "FFA" && gameState.playercount === 4) {
+      settings.gamemode = "TEM";
+      settings.teamdist = [1,1,0,0];
+      await game.collection('chat').add({
+        message: "Gamemode is now set to Teams (TEM).",
+        senderID: "0",
+        senderName: "[ System ]",
+        timestamp: firebase.firestore.Timestamp.now(),
+        spectate: false
+      });
+    } else {
+      settings.gamemode = "FFA";
+      settings.teamdist = [0,0,0,0];
+      await game.collection('chat').add({
+        message: "Gamemode is now set to Free For All (FFA).",
+        senderID: "0",
+        senderName: "[ System ]",
+        timestamp: firebase.firestore.Timestamp.now(),
+        spectate: false
+      });
+    }
+    game.set(settings, {merge: true});
+  }
+
+  const switchTeams = () => {
+    if (gameState.gamemode !== "TEM" || playerIndex === -1) return;
+    var newlist = gameState.teamdist.slice();
+    newlist[playerIndex] = 1 - newlist[playerIndex];
+    game.set({
+      teamdist: newlist
+    }, {merge: true});
   }
 
   if (gameState && !loading && !error) {
+    var players = [];
+    for (let i = 0; i < gameState.playercount; i++) {
+      players.push(
+        <React.Fragment key={gameState.players[i]}>
+          <div key={gameState.playernames[i]} className="rbwrapper" style={{
+            backgroundColor: (gameState.gamemode === "FFA" ? "white" : (gameState.teamdist[i] ? "rgb(255,200,200)" : "cyan")),
+            fontWeight: (i === playerIndex ? "bold" : "normal")
+          }}>{gameState.playernames[i]}</div>
+        </React.Fragment>
+      )
+    }
     return (
       <React.Fragment>
-        <GamehostStatus/>
+        <Dialog gd={dialogMessage} sd={setDialog} />
+        <Chat context="lobby" game={game} isSpectator={spectator} gameStarted={false}/>
+        <GamehostStatus hidden={false} />
         <h1> { gameState.roomname } </h1>
         { gameState.winner && 
           <h2> 
             <span style={{fontWeight: "normal"}}>Winner: </span>
               {gameState.winner}
             <span style={{fontWeight: "normal"}}> with </span>
-             {Math.max.apply(Math, gameState.points)}
+             {gameState.winnerscore}
             <span style={{fontWeight: "normal"}}> points!</span>
           </h2>
         }
+        
         <div style={{fontWeight: "bold", margin: "10px"}}>Players:</div>
-        {gameState.playernames.map(name => (
-          <div key={name} className="rbwrapper" style={{
-            backgroundColor: "white"
-          }}>{name}</div>
-        ))}
+        
+        { players }
 
-        <button onClick={startGame}>Start Game</button>
+        { spectator ? null : <button onClick={startGame}>Start Game</button> }
+        <button onClick={switchGame}>{spectator ? "Switch to Player" : "Switch to Spectator"}</button>
+        { spectator ? null : <React.Fragment>
+          <button onClick={toggleGamemode} disabled={gameState.playercount !== 4}>Gamemode: {gameState.gamemode}</button>
+          { gameState.gamemode === "TEM" && <button onClick={switchTeams}>Switch Teams</button> }
+        </React.Fragment> }
         <button onClick={leaveGame}>Leave Game</button>
-        <div> {dialogMessage} </div>
       </React.Fragment>
     )
   } else {
@@ -537,7 +704,7 @@ function RoomStart(props) {
 function RoomOption(props) {
   const data = props.rm.data()
   const isProtected = data["password"] === "";
-  const nojoin = (data["started"] || data["playercount"] >= 2) && data["players"].indexOf(auth.currentUser.uid) === -1;
+  const nojoin = data["playercount"] === 4;
   if (!auth.currentUser) {
     return (<React.Fragment>
       An unexpected error occurred - ROOMOPTION component.
@@ -553,7 +720,7 @@ function RoomOption(props) {
             <div style={{fontSize: "1em", fontStyle: "italic", color: "lightgray"}}>Room ID: {props.rm.id}</div>
           </div>
           <div className="roomstats">
-            <div style={{flexGrow: "1"}}><b>{data["playercount"]}</b>/2 Players</div>
+            <div style={{flexGrow: "1"}}><b>{data["playercount"]}</b>/4 Players</div>
             <div style={{flexGrow: "1"}}>{isProtected ? "Public" : "Protected"}</div>
             <div style={{flexGrow: "1"}}>{data["started"] ? "In Game" : "In Lobby"}</div>
           </div>
@@ -566,10 +733,11 @@ function RoomOption(props) {
 function App() {
   const [user] = useAuthState(auth);
   const [gameID, setGame] = useState(null);
+  const [username, setUsername] = useState("Anonymous");
   return (
     <div className="App">
       {
-        user ? (gameID ? <Game gameID={gameID} setGame={setGame}/> : <RoomSelect setGame={setGame} />) : <Login />
+        (user) ? (gameID ? <NetworkGame gameID={gameID} setGame={setGame}/> : <RoomSelect username={username} setGame={setGame} setName={setUsername} />) : <Login setter={setUsername}/>
       }
     </div>
   );

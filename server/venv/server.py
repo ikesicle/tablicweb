@@ -1,5 +1,6 @@
 import firebase_admin as firebase
 import firebase_admin.firestore as firestore
+import firebase_admin.auth as auth
 from firebase_admin import credentials
 from time import sleep
 from flask import Flask, make_response, Response, jsonify, request, abort, render_template
@@ -41,14 +42,18 @@ logwkzg = logging.getLogger('werkzeug')
 logwkzg.setLevel(logging.ERROR)
 """
 
-@app.route("/gamehost", methods = ["POST", "GET"])
-async def gamehost():
-  def rejectRequest(code, msg):
+def verify(token, uid):
+  verified = auth.verify_id_token(token)
+  return verified["uid"] == uid
+
+def rejectRequest(code, msg):
     resp = make_response(msg)
     resp.status_code = code
     resp.headers["content-type"] = "text/plain"
     return resp
 
+@app.route("/gamehost", methods = ["POST", "GET"])
+async def gamehost():
   okReq = make_response("OK")
   okReq.status_code = 200
   okReq.headers["content-type"] = "text/plain"
@@ -75,11 +80,14 @@ async def gamehost():
         "p4hand": [],
       }
       newdeck = roomsnapshot["deck"]
-      for rpt in range(0,2):
+      for rpt in range(0, 1 if roomsnapshot["gamemode"] == "TEM" else 2):
+        togive = 3
+        if len(newdeck) < roomsnapshot["playercount"] * 3:
+          togive = len(newdeck) // roomsnapshot["playercount"]
         for playerhands in range(0, roomsnapshot["playercount"]):
           lcp = "p" + str(playerhands+1) + "hand"
-          hands[lcp] += newdeck[:3]
-          newdeck = newdeck[3:]
+          hands[lcp] += newdeck[:togive]
+          newdeck = newdeck[togive:]
       hands["deck"] = newdeck
       room.update(hands)
 
@@ -91,9 +99,34 @@ async def gamehost():
       if not bool(newhand) and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
           if not roomsnapshot["deck"]:
             # End Game
+            capturecount = roomsnapshot["capturecount"]
+            points = roomsnapshot["points"]
+            points[capturecount.index(max(capturecount))] += 3
+            winner = roomsnapshot["playernames"][points.index(max(points))]
+            winnerscore = max(points)
+            if roomsnapshot["gamemode"] == "TEM":
+              blue = 0
+              red = 0
+              for i in range(0,4):
+                if roomsnapshot["teamdist"][i]: blue += points[i]
+                else: red += points[i]
+              print(f"Blue - {blue}")
+              print(f"Red - {red}")
+              if blue == red:
+                winner = "Tie"
+                winnerscore = red
+              elif blue > red:
+                winner = "Blue Team"
+                winnerscore = blue
+              else:
+                winner = "Red Team"
+                winnerscore = red
+
             room.update({
               "started": False,
-              "winner": roomsnapshot["playernames"][roomsnapshot["points"].index(max(roomsnapshot["points"]))]
+              "winner": winner,
+              "winnerscore": winnerscore,
+              "points": points
             })
           redistributeCards()
       if roomsnapshot["playercount"] == 1:
@@ -103,7 +136,6 @@ async def gamehost():
         })
 
     def removePlayer():
-      print("Removing current player " + (roomsnapshot["playernames"])[roomsnapshot["turn"]])
       hands = [roomsnapshot["p1hand"],roomsnapshot["p2hand"],roomsnapshot["p3hand"],roomsnapshot["p4hand"]]
       players = roomsnapshot["players"]
       pnames = roomsnapshot["playernames"]
@@ -127,14 +159,14 @@ async def gamehost():
         "playercount": pcnt,
         "turn": roomsnapshot["turn"]%pcnt
       })
-      if pcnt == 1:
+
+      teamNoContinue = roomsnapshot["gamemode"] == "TEM" and (roomsnapshot["teamdist"].count(1) == 0 or roomsnapshot["teamdist"].count(1) == 0)
+      if pcnt == 1 or teamNoContinue:
         room.update({
-          "started": False,
-          "winner": pnames[0]
+          "started": False
         })
 
     if actiondata["datatype"] == "turn":
-      print("Recieved a turn action request.")
       cp = "p" + str(roomsnapshot["turn"]+1) + "hand"
       if roomsnapshot["players"][roomsnapshot["turn"]] != userid: return rejectRequest(403, "Not your turn!")
       if not roomsnapshot["started"]: return rejectRequest(403, "Game not started")
@@ -159,6 +191,7 @@ async def gamehost():
         del newhand[newhand.index(actiondata["card"])]
         newtalon = []
         captured = []
+        capturecount = roomsnapshot["capturecount"]
         points = roomsnapshot["points"]
         for card in roomsnapshot["talon"]:
           if card not in actiondata["captures"]: newtalon.append(card)
@@ -167,28 +200,24 @@ async def gamehost():
         points[roomsnapshot["turn"]] += evaluatePoints(captured)
         if newtalon == []:
           points[roomsnapshot["turn"]] += 1
+        capturecount[roomsnapshot["turn"]] += len(captured)
         room.update({
           cp: newhand,
           "talon": newtalon,
           "points": points,
-          "lastPlay": "capture " + actiondata["card"] + " " + " ".join(actiondata["captures"])
-        });
-        
+          "lastPlay": "capture " + actiondata["card"] + " " + " ".join(actiondata["captures"]),
+          "capturecount": capturecount
+        })
         endTurnAndStartNext()
-
         return okReq
 
       return rejectRequest(400, "Invalid action specifier")
 
-    elif actiondata["datatype"] == "chat": return rejectRequest(404, "Chat not implemented yet")
-
     elif actiondata["datatype"] == "update":
-      print("Recieved an update request.")
       await asyncio.sleep(1)
       ctime = datetime.now(tz=timezone.utc)
       limittime = (roomsnapshot["date"] + timedelta(seconds=30)) if roomsnapshot["date"] else ctime
       if ctime <= limittime:
-        print("Within alloted answer time, ignoring")
         return okReq
       
       cturn = roomsnapshot["turn"]
@@ -203,7 +232,8 @@ async def gamehost():
 
   return rejectRequest(501, "Unsupported HTTP Method.")
 
-
-if __name__ == "__main__": 
+if __name__ == "__main__":
   #app.run(host='0.0.0.0', port=3001, debug=True, use_reloader=True)
-  serve(app)
+  serve(app, port=int(os.environ.get("PORT", 8080)))
+
+  
