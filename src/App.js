@@ -1,6 +1,6 @@
 import twlogo from './logo.png';
 import './App.css';
-import { Deck } from './tablic.js'
+import { Deck, generateTurnOrder } from './tablic.js'
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 import 'firebase/compat/auth';
@@ -50,6 +50,121 @@ function GamehostStatus(props) {
   );
 }
 
+function CheatSheet(props) {
+  const [ tab, setTab ] = useState(0);
+  const [ navOpen, setNav ] = useState(false);
+  const [ open, setOpen ] = useState(false);
+  let data;
+  switch (tab) {
+    case 0: // Basic rules + controls
+      data = (<>
+        <ul>
+          <li>
+            <b>Click</b> on cards to <b>select</b> them.
+          </li>
+          <li>
+            <b>Play</b> a card by selecting from your hand (bottom row of cards) and clicking Play.
+          </li>
+          <li>
+            <b>Capture</b> cards from the <b>talon</b> (middle of board) by selecting cards to capture from the talon and a card to capture from your hand.
+          </li>
+        </ul>
+      </>);
+      break;
+    case 1: // Card Values
+      data = (<>
+        <table className="pointtable">
+          <tbody>
+          <tr>
+            <th style={{width: "50%"}}>Card Number/Letter</th>
+            <th style={{width: "50%"}}>Value</th>
+          </tr>
+          <tr>
+            <td>Numbers</td>
+            <td>As Written</td>
+          </tr>
+          <tr>
+            <td>Aces (A)</td>
+            <td><b>Variable</b>; can be 1 or 11</td>
+          </tr>
+          <tr>
+            <td>Jacks (J)</td>
+            <td>12</td>
+          </tr>
+          <tr>
+            <td>Queens (Q)</td>
+            <td>13</td>
+          </tr>
+          <tr>
+            <td>Kings (K)</td>
+            <td>14</td>
+          </tr>
+          </tbody>
+        </table>
+      </>);
+      break;
+    case 2: // Point Values
+      data = (<>
+        <table className="pointtable">
+          <tbody>
+          <tr>
+            <th style={{width: "50%"}}>Card Type</th>
+            <th style={{width: "50%"}}>Points yield</th>
+          </tr>
+          <tr>
+            <td>2 ♣</td>
+            <td>2</td>
+          </tr>
+          <tr>
+            <td>10 ♦</td>
+            <td>2</td>
+          </tr>
+          <tr>
+            <td>Other Tens (10)</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td>Jacks (J)</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td>Queens (Q)</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td>Kings (K)</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <td>Aces (A)</td>
+            <td>1</td>
+          </tr>
+          </tbody>
+        </table>
+      </>);
+      break;
+    default:
+      data = "Invalid Entry";
+      break;
+  }
+
+  return (<>
+    <div className="cheatsheet">
+      <div className="csnavsup">
+        <button className="csopen" onClick={()=>{setNav(!navOpen); setOpen(false);}}>Reference</button>
+        <div className="csnavsub" style={ navOpen ? {} : {width: 0}}>
+          <button onClick={()=>{setTab(0)}} onClick={()=>{setOpen(true);setTab(0);}}>Rules</button>
+          <button onClick={()=>{setTab(1)}} onClick={()=>{setOpen(true);setTab(1);}}>Values</button>
+          <button onClick={()=>{setTab(2)}} onClick={()=>{setOpen(true);setTab(2);}}>Points</button>
+        </div>
+      </div>
+      <div className="cstabcontent" style={open ? {} : {height: 0, width: 0, opacity: 0}}>
+        {data}
+      </div>
+    </div>
+  </>)
+}
+
 function NetworkGame(props) {
   const game = firestore.collection('rooms').doc(props.gameID);
   const [ dialogMessage, setDialog ] = useState(null);
@@ -92,7 +207,7 @@ function NetworkGame(props) {
   // Requesting the update requires hand data. Must be done completely in here.
   const requestUpdate = async () => {
     if (spectator) return;
-    if (playerIndex === gameState.turn) {
+    if (playerIndex === gameState.turnorder[gameState.turn]) {
       await fetch(gamehost, {
         method: "POST",
         headers: {
@@ -174,9 +289,11 @@ function NetworkGame(props) {
     if (gameState.started) {
       return (
         <React.Fragment>
-          <Chat gameStarted={true} isSpectator={spectator} game={game} context={"ingame"}/>
           <GameRenderer gameState={gameState} spectating={spectator} onPlay={sendAction} playerID={playerIndex} time={time} getDialog={dialogMessage} setDialog={setDialog}/>
+          <CheatSheet />
+          <Chat gameStarted={true} isSpectator={spectator} game={game} context={"ingame"}/>
         </React.Fragment>
+
       )
     } else return <RoomStart gameID={props.gameID} setGame={props.setGame} isSpectator={spectator}/>
   } else if (!error) { return (
@@ -314,7 +431,7 @@ function Chat(props) {
           <input type="button" onClick={toggleOpenClose} value="Open/Close" />
         </form>
 
-        <div className={"chatlogs "+props.context} style={chatState ? {} : {height: '0'}}>
+        <div className={"chatlogs "+props.context} style={chatState ? {} : {height: '0', opacity: '0'}}>
           <div ref={top}></div>
           {chat}
           <div className="message" style={{textAlign: "center"}}>-- End of records (30 most recent) --</div>
@@ -389,13 +506,15 @@ function RoomSelect(props) {
       roomname: user.displayName + "'s Room",
       started: false,
       talon: [],
+      talonprev: [],
       turn: 0,
       winner: "",
       password: "",
       gamemode: "FFA",
       teamdist: [0,0,0,0],
       roomcreator: user.displayName,
-      date: null
+      date: null,
+      turnorder: []
     }).then(async (docRef) => {
       console.log("Creating chat logs")
       await docRef.collection('chat').add({
@@ -518,7 +637,8 @@ function RoomStart(props) {
       started: true,
       turn: 0,
       lastPlay: "game start",
-      date: firebase.firestore.Timestamp.now()
+      date: firebase.firestore.Timestamp.now(),
+      turnorder: generateTurnOrder(gameState.playercount)
     }
 
     for (let i = 0; i < gameState.playercount; i++) initializer["p" + String(i+1) + "hand"] = hands[i].map(crd => crd.toString());

@@ -163,5 +163,20 @@ function evaluatePoints(arr) {
   return dp
 }
 
+function generateTurnOrder(len) {
+  let arr = [], tmp, indx;
+  for (let i = 0; i < len; i++) arr.push(i);
+  console.log(arr);
+  for (let i = len-1; i >= 1; i--) {
+    indx = ranNum(0,i);
+    if (ranNum(0,1)) {
+      tmp = arr[indx];
+      arr[indx] = arr[i];
+      arr[i] = tmp;
+    }
+  }
+  console.log(arr)
+  return arr;
+}
 
-export { verifyCap, Deck, Card, ranNum, faces, suits, NUMBER_OF_CARDS, evaluatePoints }
+export { verifyCap, Deck, Card, ranNum, faces, suits, NUMBER_OF_CARDS, evaluatePoints, generateTurnOrder }

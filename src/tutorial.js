@@ -3,11 +3,13 @@ import { evaluatePoints } from './tablic.js';
 import { GameRenderer } from './renderer.js';
 
 function TutorialDialog(props) {
-  var style = {};
-  if ("xp" in props && "yp" in props) {
+  var style = {zIndex: 9};
+  if ("xp" in props) {
     style.left = props.xp;
-    style.top = props.yp;
     style.right = "auto";
+  }
+  if ("yp" in props) {
+    style.top = props.yp;
     style.bottom = "auto";
   }
   if ("w" in props) {
@@ -25,6 +27,7 @@ function TutorialDialog(props) {
 }
 
 function TutorialOverlay(props) {
+
   var overlay;
   switch (props.eventID) {
     case 0:
@@ -33,6 +36,10 @@ function TutorialOverlay(props) {
           onclose={() => {
             props.setEvent(1);
           }}
+          xp="9vw"
+          yp="30vh"
+          w="80vw"
+          h="20vh"
          />
          <div className="screencover" style={{backgroundColor: "rgba(0,0,0,0.5)"}} key="selector"></div>
       </React.Fragment>);
@@ -44,6 +51,8 @@ function TutorialOverlay(props) {
           onclose={() => {
             props.setEvent(2);
           }}
+          xp="19vw"
+          w="60vw"
          />
         <div className="selectborder player south" key="selector"> </div>
         <div className="screencover" key="cover"></div>
@@ -56,10 +65,10 @@ function TutorialOverlay(props) {
           onclose={() => {
             props.setEvent(3);
           }}
-          xp="55vw"
-          yp="60vh"
-          w="40vw"
-          h="40vh"
+          xp="9vw"
+          yp="10vh"
+          w="80vw"
+          h="30vh"
          />
         <div className="screencover" key="cover"></div>
       </React.Fragment>);
@@ -68,15 +77,14 @@ function TutorialOverlay(props) {
     case 3:
       overlay = (<React.Fragment>
         <TutorialDialog message={(<>
-          To play a card, click on it and press
-          the <span style={{fontWeight: "bold"}}>Play</span> button.
+          To play a card, <b>click</b> on it to <b>select</b> it, and then press the <b>Play</b> button.
           </>
           )}
           onclose={() => {
             props.setEvent(4);
           }}
           nextEnabled={props.readyNext}
-          xp="57vw"
+          xp="50vw"
           yp="5vh"
           w="40vw"
           h="20vh"
@@ -92,6 +100,10 @@ function TutorialOverlay(props) {
           onclose={() => {
             props.setEvent(4.5);
           }}
+          xp="9vw"
+          yp="5vw"
+          w="80vw"
+          h="20vh"
          />
         <div className="screencover" key="cover"></div>
       </React.Fragment>);
@@ -133,9 +145,9 @@ function TutorialOverlay(props) {
           onclose={() => {
             props.setEvent(5);
           }}
-          xp="20vw"
-          yp="20vh"
-          w="60vw"
+          xp="9vw"
+          yp="5vw"
+          w="80vw"
           h="60vh"
         />
         <div className="screencover" key="cover"></div>
@@ -144,14 +156,16 @@ function TutorialOverlay(props) {
 
     case 5:
       overlay = (<React.Fragment>
-        <TutorialDialog message="To capture cards, select the card(s) you wish to capture from the talon, and select the card you're capturing with from your hand."
+        <TutorialDialog message={(<>
+        To capture a card, select the card you wish to capture from the talon, and select the card you are capturing with from your hand.<p>Remember, you can capture cards with cards of equal value.</p>
+        </>)}
           onclose={() => {
             props.setEvent(6);
           }}
           nextEnabled={props.readyNext}
-          xp="57vw"
+          xp="29vw"
           yp="5vh"
-          w="40vw"
+          w="60vw"
           h="20vh"
         />
       </React.Fragment>);
@@ -164,6 +178,10 @@ function TutorialOverlay(props) {
             props.setEvent(7);
           }}
           nextEnabled={true}
+          xp="29vw"
+          yp="5vh"
+          w="60vw"
+          h="20vh"
         />
         <div className="selectborder player south" key="selector"> </div>
         <div className="screencover" key="cover"></div>
@@ -175,6 +193,24 @@ function TutorialOverlay(props) {
         <TutorialDialog message={<>
           <p>
             You gain points in Tablic for cards which you <b>capture</b> or cards that you <b>capture with</b>. How many points you get is determined by the card.</p>
+          </>
+          }
+          onclose={() => {
+            props.setEvent(7.5);
+          }}
+          nextEnabled={true}
+          xp="14vw"
+          yp="35vh"
+          w="70vw"
+          h="30vh"
+        />
+        <div className="screencover" key="cover"></div>
+      </React.Fragment>);
+      break;
+
+    case 7.5:
+      overlay = (<React.Fragment>
+        <TutorialDialog message={<>
           <table className="pointtable">
           	<tbody>
             <tr>
@@ -220,9 +256,9 @@ function TutorialOverlay(props) {
             props.setEvent(8);
           }}
           nextEnabled={true}
-          xp="20vw"
-          yp="20vh"
-          w="60vw"
+          xp="9vw"
+          yp="5vh"
+          w="80vw"
           h="60vh"
         />
         <div className="screencover" key="cover"></div>
@@ -231,14 +267,14 @@ function TutorialOverlay(props) {
     
     case 8:
       overlay = (<React.Fragment>
-        <TutorialDialog message={"You can also capture combinations of cards, as long as their values add up to your capturing card's value."}
+        <TutorialDialog message={(<>You can also capture <b>combinations</b> of cards, as long as their values add up to your capturing card's value.</>)}
           onclose={() => {
             props.setEvent(9);
           }}
           nextEnabled={props.readyNext}
-          xp="57vw"
+          xp="29vw"
           yp="5vh"
-          w="40vw"
+          w="60vw"
           h="20vh"
          />
       </React.Fragment>);
@@ -251,9 +287,9 @@ function TutorialOverlay(props) {
             props.setEvent(10);
           }}
           nextEnabled={props.readyNext}
-          xp="57vw"
+          xp="9vw"
           yp="5vh"
-          w="40vw"
+          w="80vw"
           h="20vh"
          />
       </React.Fragment>);
@@ -276,10 +312,10 @@ function TutorialOverlay(props) {
             props.setEvent(11);
           }}
           nextEnabled={true}
-          xp="20vw"
-          yp="20vh"
-          w="60vw"
-          h="60vh"
+          xp="2vw"
+          yp="4vh"
+          w="90vw"
+          h="70vh"
          />
       </React.Fragment>);
       break;
@@ -296,11 +332,12 @@ function Tutorial(props) {
   const [getDialog, setDialog] = useState(null);
 
   const [ deck ] = useState([]);
-  const [ lastPlay ] = useState("");
+  const [ lastPlay, setLastPlay ] = useState("");
   const [ p1hand, setHand ] = useState([]);
   const [ yourPoints, setPoints ] = useState(0);
-  const [ captureCount ] = useState(0);
+  const [ captureCount, setCaptureCount ] = useState(0);
   const [ talon, setTalon ] = useState([]);
+  const [ talonprev, setPrev ] = useState([]);
   const [ turn, setTurn ] = useState(0);
 
   const [ nextEnabled, setNextEnabled ] = useState(true);
@@ -320,9 +357,11 @@ function Tutorial(props) {
     roomname: "Tutorial",
     started: true,
     talon: talon,
+    talonprev: talonprev,
     turn: turn,
     gamemode: "FFA",
     teamdist: [0,0,0,0],
+    turnorder: [0, 1]
   };
 
   const [ eventID, setEventID ] = useState(0);
@@ -341,6 +380,7 @@ function Tutorial(props) {
             setNextEnabled(true);
             setTurn(1);
             setOnPlay(() => () => {setDialog("Not your turn!")});
+            setLastPlay(a +' '+h+' '+t.join(' '));
           } else {
             setDialog("Play a card!");
           }
@@ -355,10 +395,13 @@ function Tutorial(props) {
           if (a === "capture") {
             setHand(["32", "24"]);
             setTalon(["15", "17"]);
+            setPrev(["10", "15", "47"]);
             setTurn(1);
             setOnPlay(() => () => {setDialog("Not your turn!")});
             setPoints(yourPoints + evaluatePoints(t.concat([h])));
+            setCaptureCount(2);
             setNextEnabled(true);
+            setLastPlay(a +' '+h+' '+t.join(' '));
           }
           else {
             setDialog("Try capturing a card with another card!");
@@ -374,10 +417,13 @@ function Tutorial(props) {
           if (a === "capture") {
             setHand([]);
             setTalon(["44"]);
+            setPrev(["22", "33", "15", "44"]);
             setTurn(1);
+            setCaptureCount(6)
             setOnPlay(() => () => {setDialog("Not your turn!")});
             setPoints(yourPoints + evaluatePoints(t.concat([h])));
             setNextEnabled(true);
+            setLastPlay(a +' '+h+' '+t.join(' '));
           }
           else {
             setDialog("Try capturing some cards!");
@@ -394,10 +440,13 @@ function Tutorial(props) {
             if (t.length === 7) {
               setHand([]);
               setTalon([]);
+              setPrev(["12", "24", "25", "33", "4K", "1J", "32"]);
               setTurn(1);
+              setCaptureCount(14);
               setOnPlay(() => () => {setDialog("Not your turn!")});
-              setPoints(yourPoints + evaluatePoints(t.concat([h])));
+              setPoints(10);
               setNextEnabled(true);
+              setLastPlay(a +' '+h+' '+t.join(' '));
             } else {
               setDialog("Capture all combinations/cards which have a value of 14 at once!")
             }

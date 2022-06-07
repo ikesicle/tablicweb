@@ -50,6 +50,7 @@ button, input[type=button]{
 
 button[disabled], input[type=button][disabled]{
   color: gray;
+  cursor: not-allowed;
 }
 
 button:hover, input[type=button]:hover{
@@ -81,7 +82,7 @@ input[type=text]:focus {
   left: 0;
   bottom: 0;
   width: 100vw;
-  height: 95vh;
+  height: 100vh;
   z-index: 5;
 }
 
@@ -119,7 +120,7 @@ input[type=text]:focus {
   height: 100%;
   left: 0;
   top: 0;
-  z-index: 2;
+  z-index: 5;
 }
 
 .talon-grid {
@@ -130,6 +131,7 @@ input[type=text]:focus {
   left: 0;
   transition: 0.3s;
   background-color: gray;
+  z-index: 1;
 }
 
 .player-hand {
@@ -168,7 +170,6 @@ input[type=text]:focus {
   transition: 0.4s;
   cursor: grab;
   border: 1px black solid;
-  animation: card-creation 0.4s ease-out;
   z-index: 1;
 }
 
@@ -177,12 +178,58 @@ input[type=text]:focus {
   transition: 0.2s;
 }
 
+.pointscard {
+  position: fixed;
+  display: flex;
+  justify-content: center;
+  align-content: center;
+  text-align: center;
+  flex-direction: column;
+  border: 1px solid black;
+  background-color: white;
+  z-index: 6;
+  font-size: 5vh;
+  font-weight: bold;
+  transform: scaleX(0);
+  height: 20vh;
+  width: 14vh;
+  left: calc(50vw - 7vh);
+  bottom: 42.5vh;
+  border: 2px solid darkgray;
+  -webkit-box-shadow: 0px 0px 18px 3px #FFFFFF; 
+  box-shadow: 0px 0px 18px 3px #FFFFFF;
+}
+
+.allclear {
+  position: fixed;
+  height: 30vh;
+  width: 100vw;
+  top: 30vh;
+  left: 0;
+  font-weight: bold;
+  position: fixed;
+  display: flex;
+  justify-content: center;
+  align-content: center;
+  text-align: center;
+  flex-direction: column;
+  z-index: 10;
+  opacity: 0;
+  transform: scaleX(0);
+  font-size: 15vh;
+  text-shadow: 0px 0px 20px #FFFFFF;
+}
+
+.oneplus {
+
+}
+
 .dialog {
-  padding: 10px;
+  padding: 2vw;
   position: fixed;
   display: flex;
   flex-direction: column;
-  left: 30vw;
+  left: 29vw;
   top: 40vh;
   bottom: 40vh;
   z-index: 6;
@@ -201,6 +248,7 @@ input[type=text]:focus {
   width: 50%;
   margin-left: auto;
   margin-right: auto;
+  margin-top: 5%;
   margin-bottom: 5%;
   background-color: lightgray;
   color: black;
@@ -341,6 +389,7 @@ input[type=text]:focus {
   font-size: 2.5em;
   color: rgb(170,170,170);
   transition: 0.5s;
+  z-index: 4;
 }
 
 .turnindicator.current{
@@ -356,6 +405,7 @@ input[type=text]:focus {
   font-weight: bold;
   color: rgb(140,140,140);
   transition: 0.5s;
+  z-index: 4;
 }
 
 
@@ -368,6 +418,23 @@ input[type=text]:focus {
   height: auto;
   flex-direction: column;
 }
+
+.cardcount {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-content: center;
+}
+
+.carddata {
+  text-align: center;
+  flex-grow: 2;
+}
+
+.cdisplay {
+  margin-left: 1vh;
+}
+
 .chatinput {
   position: relative;
   width: calc(100% - 1em);
@@ -394,7 +461,7 @@ input[type=text]:focus {
   left: 0;
   width: auto;
   height: 2em;
-  z-index: 4;
+  z-index: 10;
 }
 
 .chatform {
@@ -408,9 +475,9 @@ input[type=text]:focus {
 }
 
 .chatlogs {
-  background-color: rgba(0,0,0,0.5);
+  background-color: rgba(0,0,0,0.75);
   color: white;
-  z-index: 5;
+  z-index: 15;
   border: 1px solid black;
   transition: 0.5s;
 }
@@ -465,6 +532,8 @@ input[type=text]:focus {
   transition: 0.4s;
 }
 
+
+
 .message.new {
   animation: room-button-creation 0.2s ease-out;
 }
@@ -473,6 +542,7 @@ input[type=text]:focus {
   position: fixed;
   right: 2vw;
   top: 0em;
+  z-index: 10;
 }
 
 .pointtable {
@@ -480,7 +550,55 @@ input[type=text]:focus {
  right: 0;
  margin-left: auto;
  margin-right: auto;
- width: 70%;
+ width: 100%;
+}
+
+.pointtable tr {
+  border: 1px solid black;
+}
+
+.cheatsheet {
+  position: fixed;
+  top: 2em;
+  width: auto;
+  height: auto;
+  right: 0;
+  z-index: 6;
+  text-align: right;
+  justify-content: right;
+}
+
+.csnavsup {
+  display: flex;
+  flex-direction: row-reverse;
+  position: static;
+  width: 100%;
+  transition: 0.5s;
+}
+
+.csnavsub {
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  transition: 0.5s;
+  width: 100%;
+  justify-content: right;
+}
+
+.cstabcontent {
+  margin-left: auto;
+  margin-right: 0;
+  position: relative;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  text-align: center;
+  transition: 0.5s;
+  border: 1px black solid;
+  height: 30vh;
+  width: 50vw;
+  background-color: rgba(0,0,0,0.5);
+  color: white;
+  z-index: 6;
 }
 
 @media only screen and (max-aspect-ratio: 1/1) {
@@ -555,10 +673,17 @@ input[type=text]:focus {
     top: auto;
   }
 
+  .south .cardcount {
+    text-align: left;
+    flex-grow: 10;
+    padding-top: 0;
+  }
+
   .cardcount {
     text-align: center;
     flex-grow: 10;
     padding-top: 3.5vh;
+    padding-left: 1vw;
   }
 
   .south .pointcounter {
@@ -566,12 +691,15 @@ input[type=text]:focus {
     padding-left: 0;
   }
 
+  .south .stats {
+    flex-direction: column;
+  }
+
   .stats {
     flex-direction: row;
   }
 
-  .
-  .south.player .stats {
-    flex-direction: column
+  .cstabcontent {
+  width: 100vw;
   }
 }

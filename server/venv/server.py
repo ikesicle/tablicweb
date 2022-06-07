@@ -69,7 +69,6 @@ async def gamehost():
 
     roomsnapshot = room.get()
     if not roomsnapshot.exists: return rejectRequest(404, "Room no longer exists.")
-    print("Serving Game Request - "+roomsnapshot.id)
     roomsnapshot = roomsnapshot._data
 
     def redistributeCards():
@@ -110,8 +109,6 @@ async def gamehost():
               for i in range(0,4):
                 if roomsnapshot["teamdist"][i]: blue += points[i]
                 else: red += points[i]
-              print(f"Blue - {blue}")
-              print(f"Red - {red}")
               if blue == red:
                 winner = "Tie"
                 winnerscore = red
@@ -157,7 +154,8 @@ async def gamehost():
         "players": players,
         "playernames": pnames,
         "playercount": pcnt,
-        "turn": roomsnapshot["turn"]%pcnt
+        "turn": roomsnapshot["turn"]%pcnt,
+        "turnorder": roomsnapshot["turnorder"][:roomsnapshot["turn"]] + roomsnapshot["turnorder"][roomsnapshot["turn"]+1:]
       })
 
       teamNoContinue = roomsnapshot["gamemode"] == "TEM" and (roomsnapshot["teamdist"].count(1) == 0 or roomsnapshot["teamdist"].count(1) == 0)
@@ -167,8 +165,10 @@ async def gamehost():
         })
 
     if actiondata["datatype"] == "turn":
-      cp = "p" + str(roomsnapshot["turn"]+1) + "hand"
-      if roomsnapshot["players"][roomsnapshot["turn"]] != userid: return rejectRequest(403, "Not your turn!")
+      cpind = roomsnapshot["turnorder"][roomsnapshot["turn"]]
+      cp = "p" + str(cpind+1) + "hand"
+      if roomsnapshot["players"][cpind] != userid: return rejectRequest(403, "Not your turn!")
+
       if not roomsnapshot["started"]: return rejectRequest(403, "Game not started")
       
       if actiondata["type"] == "play":
@@ -197,12 +197,13 @@ async def gamehost():
           if card not in actiondata["captures"]: newtalon.append(card)
           else: captured.append(card)
         captured.append(actiondata["card"])
-        points[roomsnapshot["turn"]] += evaluatePoints(captured)
+        points[cpind] += evaluatePoints(captured)
         if newtalon == []:
-          points[roomsnapshot["turn"]] += 1
-        capturecount[roomsnapshot["turn"]] += len(captured)
+          points[cpind] += 1
+        capturecount[cpind] += len(captured)
         room.update({
           cp: newhand,
+          "talonprev": roomsnapshot["talon"],
           "talon": newtalon,
           "points": points,
           "lastPlay": "capture " + actiondata["card"] + " " + " ".join(actiondata["captures"]),
@@ -233,7 +234,7 @@ async def gamehost():
   return rejectRequest(501, "Unsupported HTTP Method.")
 
 if __name__ == "__main__":
-  #app.run(host='0.0.0.0', port=3001, debug=True, use_reloader=True)
-  serve(app, port=int(os.environ.get("PORT", 8080)))
+  app.run(host='0.0.0.0', port=3001, debug=True, use_reloader=True)
+  #serve(app, port=int(os.environ.get("PORT", 8080)))
 
   
