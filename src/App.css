@@ -29,14 +29,13 @@
 
 @keyframes pulse {
   0% {
-    color: initial;
+    filter: brightness(0);
   }
-
   50% {
-    color: rgba(255,255,255,0);
+    filter: brightness(1);
   }
   100% {
-    color: initial;
+    filter: brightness(0);
   }
 }
 
@@ -75,6 +74,7 @@ input[type=text]:focus {
   text-align: center;
   overflow: hidden;
   height: 100vh;
+  width:  100vw;
 }
 
 .screencover {
@@ -87,14 +87,12 @@ input[type=text]:focus {
 }
 
 .applogo {
-  transition: 0.5s;
   width: auto;
   height: 40vh;
   margin: 15vh;
 }
 
 .credits {
-  transition: 0.5s;
   position: fixed;
   bottom: 1em;
   left: 0;
@@ -112,9 +110,12 @@ input[type=text]:focus {
   height: 1em;
   padding: 0.5em;
   border: gray solid 1px;
-  transition: 0.3s;
 }
 
+.stickied {
+  position:  sticky;
+  border: 2px dashed rgba(0,0,0,0.5);
+}
 .card {
   position: absolute;
   height: 100%;
@@ -129,7 +130,6 @@ input[type=text]:focus {
   width: 100vw;
   top: 30vh;
   left: 0;
-  transition: 0.3s;
   background-color: gray;
   z-index: 1;
 }
@@ -137,10 +137,9 @@ input[type=text]:focus {
 .player-hand {
   position: absolute;
   height: 21vh;
-  width: 31vw;
+  width: 100vw;
   bottom: 0;
-  left: 19vw;
-  transition: 0.3s;
+  left: 0;
 }
 
 .selectborder[hide]::before {
@@ -163,12 +162,34 @@ input[type=text]:focus {
   animation: border-dance 2s infinite linear;
 }
 
+.player.spectate:hover::before {
+  content: "";
+  display: block;
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  height: calc(100% + 8px);
+  width: calc(100% + 8px);
+  background: linear-gradient(90deg, red 50%, transparent 50%), linear-gradient(90deg, red 50%, transparent 50%), linear-gradient(0deg, red 50%, transparent 50%), linear-gradient(0deg, red 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 15px 4px, 15px 4px, 4px 15px, 4px 15px;
+  background-position: 0px 0px, 0px 100%, 0px 0px, 100% 0px; /* TOP BOTTOM LEFT RIGHT */
+  padding: 0px;
+  animation: border-dance 2s infinite linear;
+  transition:  0.5s;
+}
+
+.player.spectate:hover {
+  cursor: pointer;
+  background-color: rgba(255,0,0,0.1);
+}
+
 .crdcontainer {
   position: absolute;
-  height: 20vh;
-  width: 14vh; /* Fixed calculated */
+  height: 22vh;
+  width: 15.4vh; /* Fixed calculated */
   transition: 0.4s;
-  cursor: grab;
+  cursor: pointer;
   border: 1px black solid;
   z-index: 1;
 }
@@ -220,10 +241,6 @@ input[type=text]:focus {
   text-shadow: 0px 0px 20px #FFFFFF;
 }
 
-.oneplus {
-
-}
-
 .dialog {
   padding: 2vw;
   position: fixed;
@@ -260,21 +277,19 @@ input[type=text]:focus {
 }
 
 .player {
+  display: flex;
+  flex-direction: column;
   text-align: left;
   border: 2px dashed gray;
   position: fixed;
-  width: 100px;
-  height: 100px;
-  transition: 0.5s;
+  width: 13vh;
+  height: 13vh;
 }
 
-.player:hover {
-  border: 3px solid red;
-}
 .north {
   right: auto;
-  left: calc(10vw + 110px);
-  top: calc(30vh - 130px);
+  left: calc(10vw + 14vh);
+  top: 13vh;
 }
 .south {
   right: 10vw;
@@ -283,13 +298,13 @@ input[type=text]:focus {
 
 .east {
   left: 10vw;
-  top: calc(30vh - 120px);
+  top: 15vh;
 }
 
 .west {
   right: auto;
-  left: calc(10vw + 220px);
-  top: calc(30vh - 120px);
+  left: calc(10vw + 28vh);
+  top: 15vh;
 }
 
 .pushaction {
@@ -300,8 +315,18 @@ input[type=text]:focus {
   height: auto;
   width: 60vw;
   border: 1px solid black;
-  transition: 0.5s;
+  transition: none;
   z-index: 3;
+}
+
+.sectionlabel {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  font-size: 15vh;
+  font-weight: bold;
+  color: rgba(0,0,0,0.1);
+
 }
 
 .pushaction:hover {
@@ -316,7 +341,6 @@ input[type=text]:focus {
   height: auto;
   width: auto;
   font-size: 5vh;
-  transition: 0.5s;
   z-index: 3;
   color: rgb(200,200,200);
   animation: pulse 0.7s infinite;
@@ -366,29 +390,32 @@ input[type=text]:focus {
   display: flex;
   flex-direction: column;
   text-align: right;
-  transition: 0.5s;
 }
 
 .roombutton:hover > .roomstats {
   color: white;
 }
 
+.roomscroll {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
 .rbwrapper {
   transition: 0.4s;
   background-color: rgb(50,50,50);
   width: 80%;
   margin: auto;
-  margin-bottom: 10px;
+  margin-top: 10px;
   animation: room-button-creation 0.4s ease-out;
 }
 
 .turnindicator {
   position: absolute;
-  top: calc(30vh - 3em);
+  top: 15vh;
   right: 0;
-  font-size: 2.5em;
+  font-size: 5vh;
   color: rgb(170,170,170);
-  transition: 0.5s;
   z-index: 4;
 }
 
@@ -399,12 +426,11 @@ input[type=text]:focus {
 
 .turntimer {
   position: absolute;
-  top: calc(30vh - 1em);
+  top: 20vh;
   right: 0;
-  font-size: 5em;
+  font-size: 10vh;
   font-weight: bold;
   color: rgb(140,140,140);
-  transition: 0.5s;
   z-index: 4;
 }
 
@@ -415,15 +441,31 @@ input[type=text]:focus {
 
 .stats {
   display: flex;
-  height: auto;
+  flex-grow: 2;  
   flex-direction: column;
+}
+
+.pointcounter {
+  font-size: 2vh;
 }
 
 .cardcount {
   display: flex;
+  position: relative;
   flex-direction: row;
   justify-content: center;
   align-content: center;
+  height: 2vh;
+  font-size: 2vh;
+}
+
+.pcnum {
+  font-weight: bold;
+  font-size: 6vh;
+}
+
+.cdisplay {
+  height: 100%;
 }
 
 .carddata {
@@ -444,7 +486,6 @@ input[type=text]:focus {
 
 .chatarea {
   position: fixed;
-  transition: 0.5s;
 }
 
 .chatarea.lobby {
@@ -502,25 +543,14 @@ input[type=text]:focus {
   right: 0;
   width: 100%;
   overflow-y: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
-/*
-.chatlogfade {
-  position: relative;
-  transition: 0.1s;
+
+.chatlogs::-webkit-scrollbar {
+  display: none;
 }
-.chatlogfade.lobby {
-  height: 3vh;
-  width: 90vw;
-  top: -3vh;
-  background-image: linear-gradient(to bottom, rgba(0,0,0,0) 0%, lightgray 50%, lightgray 100%);
-}
-.chatlogfade.ingame {
-  height: 5vh;
-  width: 100vw;
-  top: -4vh;
-  background-image: linear-gradient(to bottom, rgba(0,0,0,0) 0%, lightgray 30%, lightgray 70%, rgba(0,0,0,0) 100%);
-}
-*/
+
 .message {
   padding-left: 1em;
   padding-right: 0.5em;
@@ -529,7 +559,6 @@ input[type=text]:focus {
   font-size: 0.8em;
   flex-shrink: 1;
   text-align: left;
-  transition: 0.4s;
 }
 
 
@@ -576,6 +605,10 @@ input[type=text]:focus {
   transition: 0.5s;
 }
 
+.csopen {
+
+}
+
 .csnavsub {
   display: flex;
   flex-direction: row;
@@ -612,9 +645,9 @@ input[type=text]:focus {
   }
   
   .player-hand {
-    left: 19vw;
-    width: 35vw;
-    height: 21vh;
+    left: 0;
+    width: 100vw;
+    height: 30vh;
   }
   
   .north {
@@ -630,7 +663,7 @@ input[type=text]:focus {
     right: 2vw;
     bottom: 2vh;
     width: 25vw;
-    height: 15vh;
+    height: 13vh;
   }
   .east {
     left: 0vw;
@@ -673,17 +706,31 @@ input[type=text]:focus {
     top: auto;
   }
 
+  .cardcount {
+    position: initial;
+    text-align: center;
+    flex-direction:  column;
+    align-items: stretch;
+    flex-grow: 10;
+    padding-left: 1vw;
+    height: 100%;
+  }
+
   .south .cardcount {
     text-align: left;
+    flex-direction:  row;
     flex-grow: 10;
     padding-top: 0;
   }
 
-  .cardcount {
-    text-align: center;
-    flex-grow: 10;
-    padding-top: 3.5vh;
-    padding-left: 1vw;
+  .carddata {
+    display: flex;
+    justify-content: center;
+    align-content: center;
+  }
+
+  .cdisplay {
+    height: 1em;
   }
 
   .south .pointcounter {
@@ -697,6 +744,7 @@ input[type=text]:focus {
 
   .stats {
     flex-direction: row;
+    height: auto;
   }
 
   .cstabcontent {

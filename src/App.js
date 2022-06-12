@@ -6,7 +6,7 @@ import 'firebase/compat/firestore';
 import 'firebase/compat/auth';
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { useDocumentData, useCollection } from 'react-firebase-hooks/firestore';
+import { useDocumentData, useCollection, useDocument } from 'react-firebase-hooks/firestore';
 import { firebaseConfig, server } from './cfg.js';
 import useInterval from './chooks.js';
 import { Dialog, GameRenderer } from './renderer.js';
@@ -39,7 +39,7 @@ function GamehostStatus(props) {
   useEffect(()=>{updateStatus()}, []);
 
   if (!props.hidden) return ( <React.Fragment>
-    <div className="statusbox" style={{border: "2px solid", borderColor: status ? "green" : "red"}}>
+    <div className="statusbox" style={{border: "2px solid", borderColor: status ? "green" : "red", backgroundColor: status ? "rgba(0,255,0,0.2)" : "rgba(255,0,0,0.2)"}}>
       Status: <span style={{fontWeight: "bold"}}>{status ? "Online" : "Offline"}</span>
     </div>
   </React.Fragment>
@@ -172,6 +172,7 @@ function NetworkGame(props) {
   const [ time, setTime ] = useState(0);
   const [ timerSpeed, setSpeed ] = useState(null);
   const [ spectatorView ] = useState(0);
+  const [ sending, setSendState ] = useState(false); 
 
   var playerIndex, yourHand, spectator = false;
   if (gameState && !loading && !error && auth.currentUser) {
@@ -181,8 +182,10 @@ function NetworkGame(props) {
   }
   
   // Client-side verification can be done with the Game object; firing off the game requires a bit more work.
-  const sendAction = (actiontype, card, selectedTalon) => {
-    fetch(gamehost, {
+  const sendAction = async (actiontype, card, selectedTalon) => {
+    if (sending) return;
+    setSendState(true);
+    await fetch(gamehost, {
       method: "POST",
       headers: {
         "userid": auth.currentUser.uid,
@@ -199,8 +202,10 @@ function NetworkGame(props) {
     }).then(async (response)=> {
       if (response.status !== 200) setDialog(await response.text());
       else setDialog(null);
+      setSendState(false);
     }).catch((err)=>{
       setDialog("An unexpected error occurred while sending.")
+      setSendState(false);
     });
   };
 
@@ -257,7 +262,7 @@ function NetworkGame(props) {
 
   useEffect(()=> {
     if (gameState && gameState.started) {
-      setTime("--");
+      setTime("30");
       setSpeed(100);
     }
     else {
@@ -313,6 +318,61 @@ function NetworkGame(props) {
   }
 }
 
+function DebugGame(props) {
+  const [getDialog, setDialog] = useState(null);
+  const debugGame = {
+    deck: [],
+    lastPlay: "game start",
+    p1hand: ["1A","22","33","44","15"],
+    p2hand: [],
+    p3hand: [],
+    p4hand: [],
+    playercount: 4,
+    playernames: ["Player 1", "Player 2", "Player 3", "Player 4"],
+    players: ["1","2","3","4"],
+    points: [0, 0, 0, 0],
+    capturecount: [0, 0, 0, 0],
+    roomname: "Debug CSS Room",
+    started: true,
+    talon: ["36","27","18","49","1K"],
+    talonprev: [],
+    turn: 0,
+    gamemode: "FFA",
+    teamdist: [0,0,0,0],
+    turnorder: [0, 1, 2, 3]
+  };
+
+  return (<>
+    <button className="exitbutton" style={{right: "auto", left: "2vw", top:"3em"}} onClick={props.exit}>Exit</button>
+    <GameRenderer gameState={debugGame} spectating={false} onPlay={()=>{}} playerID={0} time={"Time"} getDialog={getDialog} setDialog={setDialog}/>
+    <CheatSheet />
+    <DebugChat isSpectator={false} context={"ingame"}/>
+  </>)
+}
+
+function DebugChat(props) {
+  const [ messageValue, setMessage ] = useState("");
+  const [ chatState, setChatState ] = useState(false);
+  const top = useRef(null);
+  const toggleOpenClose = (e) => { setChatState(!chatState); }
+
+  return (<React.Fragment>
+    <div className={"chatarea "+props.context} >
+      <form className="chatform" onSubmit={(e)=>{e.preventDefault()}}>
+        <input type="text" className="chatinput" value={messageValue} onChange={e => setMessage(e.target.value)} placeholder="Type..." />
+        <input type="button" className="chattoggle" onClick={toggleOpenClose} value="Open/Close" />
+      </form>
+
+      <div className={"chatlogs "+props.context} style={chatState ? {} : {height: '0', opacity: '0'}}>
+        <div ref={top}></div>
+          Text messages go here
+        <div className="message" style={{textAlign: "center"}}>-- End of records (30 most recent) --</div>
+        <div style={{height: "3vh"}}>------</div>
+      </div>
+    </div>
+  </React.Fragment>);
+}
+
 function Login(props) {
   const [formValue, setFormValue] = useState('');
   const [dialog, setDialog] = useState(null);
@@ -322,15 +382,18 @@ function Login(props) {
       setDialog("Name must be 15 letters or less.");
       return;
     }
-    auth.signInAnonymously();
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        user.updateProfile({
-          displayName: formValue
-        })
-        props.setter(formValue)
+    await auth.signInAnonymously().then(async (ucred) => {
+      await ucred.user.updateProfile({displayName: formValue});
+      var userdataref = await firestore.collection('userstates').doc(ucred.user.uid);
+      if (!(await userdataref.get().exists)) {
+        userdataref.set({
+          inGame: "",
+          pfp: "",
+          themePref: ""
+        });
       }
-    })
+    });
+    props.setter(formValue);
   }
   
   return (
@@ -356,14 +419,15 @@ function Login(props) {
 }
 
 function Chat(props) {
+  
+  const [ messageValue, setMessage ] = useState("");
+  const [ chatState, setChatState ] = useState(false);
+  const top = useRef(null);
   const gamechat = props.game.collection('chat');
   var filter = gamechat.orderBy("timestamp", "desc");
   filter = filter.limit(50);
   const [ gamechatref, loading, error ] = useCollection(filter);
-  const [ messageValue, setMessage ] = useState("");
   const [ user ] = useAuthState(auth)
-  const top = useRef(null);
-  const [ chatState, setChatState ] = useState(false);
 
   const send = async (e) => {
     e.preventDefault();
@@ -383,9 +447,7 @@ function Chat(props) {
     top.current.scrollIntoView({behavior: "smooth"});
   }
 
-  const toggleOpenClose = (e) => {
-    setChatState(!chatState);
-  }
+  const toggleOpenClose = (e) => { setChatState(!chatState); }
 
   var ctr = -1;
   var chat;
@@ -443,21 +505,24 @@ function Chat(props) {
 }
 
 function RoomSelect(props) {
-  const roomlist = firestore.collection('rooms');
-  const [rooms, loadingRoom, roomError] = useCollection(roomlist);
   const [user] = useAuthState(auth);
+  const roomlist = firestore.collection('rooms');
+  const userstatus = !user ? null : firestore.collection('userstates').doc(user.uid);
+  const [rooms, loadingRoom, roomError] = useCollection(roomlist);
+  const [userinfo] = useDocumentData(userstatus);
   const [dialog, setDialog] = useState(null)
-  const [inTutorial, setTutorial] = useState(false);
-  
+  const [scene, setScene] = useState("");
+  const [rc, setRc] = useState(false);
+
   const joinRoom = async (rm) => {
     console.log(`Logging in to room '${rm}'`)
-    const game = roomlist.doc(rm);
-    const go = await game.get();
-    const gamedata = go.data();
+    const game = roomlist.doc(rm)
+    const gamedata = (await game.get()).data();
     var msg = user.displayName + " is now spectating."
+    if (!userinfo) return;
     if (user && gamedata) {
-      if (gamedata["playercount"] < 4 && gamedata["players"].indexOf(user.uid) === -1 && !gamedata["started"]) {
-        game.set({
+      if (gamedata["playercount"] < 4 && gamedata["players"].indexOf(user.uid) === -1 && !gamedata["started"] && userinfo.inGame === "") {
+        await game.set({
           players: gamedata["players"].concat([user.uid]),
           playernames: gamedata["playernames"].concat([user.displayName]),
           playercount: gamedata["playercount"] + 1
@@ -472,9 +537,16 @@ function RoomSelect(props) {
           timestamp: firebase.firestore.Timestamp.now(),
           spectate: false
         });
+        await userstatus.set({
+          inGame: rm
+        }, {merge: true});
       }
-      else if (gamedata["players"].indexOf(user.uid !== -1)) {}
-      else if (gamedata) {
+      else if (gamedata["players"].indexOf(user.uid !== -1) && userinfo.inGame === rm) {
+        await userstatus.set({
+          inGame: rm
+        }, {merge: true});
+      }
+      else {
         await game.collection('chat').add({
           message: msg,
           senderID: "0",
@@ -486,11 +558,18 @@ function RoomSelect(props) {
       props.setGame(rm);
     }
     else if (!(gamedata)) {
-      setDialog("Unable to join.");
+      setDialog("Can't access room data.");
     }
   };
 
   const createGame = async () => {
+    if (rc || !userinfo) return;
+    setRc(true);
+    if (userinfo.inGame !== "") {
+      setDialog("Cannot create new room when in game.")
+      setRc(false);
+      return;
+    }
     await roomlist.add({
       deck: [],
       lastPlay: "",
@@ -524,7 +603,7 @@ function RoomSelect(props) {
         timestamp: firebase.firestore.Timestamp.now(),
         spectate: false
       });
-      await joinRoom(docRef.id);
+      await joinRoom(docRef.id).then(()=>{setRc(false);});
     });
   };
 
@@ -543,48 +622,73 @@ function RoomSelect(props) {
     )
   }
   else {
-    rmav = (rooms.docs.length > 1) ? rooms.docs.map(rm => rm.id === "userfield" ? null : (<RoomOption key={rm.id} join={async() => joinRoom(rm.id)} rm={rm} />)) : (<div style={{
+    rmav = (rooms.docs.length > 0) ? rooms.docs.map(rm => <RoomOption key={rm.id} join={async() => joinRoom(rm.id)} rm={rm} />) : (<div style={{
       fontSize: "15px",
       fontStyle: "italic",
       margin: "10px"
     }}>There are currently no available rooms. Create one yourself, or check back later.</div>);
   }
-  if (!inTutorial) {
-    return (
-      <React.Fragment>
-        <GamehostStatus hidden={false} />
-        <h1>
-          Welcome, {user ? (user.displayName || props.username) : "Anonymous"}!
-        </h1>
-        <button onClick={async () => {
-          props.setName(null);
-          await auth.currentUser.delete();
-        }}>Sign Out</button>
-        <button onClick={createGame}>Create New Game</button>
-        <button onClick={()=>{
-          setTutorial(true);
-        }}>How to play</button>
-        <h2>Available Rooms...</h2>
-        <Dialog gd={dialog} sd={setDialog} />
-        {rmav}
-      </React.Fragment>)
-  } else {
-    return (<Tutorial exit={()=>{
-      setTutorial(false);
-    }} user={user}/>)
+  switch (scene) {
+    case "tutorial":
+      return (
+        <Tutorial exit={()=>{
+          setScene("");
+        }} user={user}/>
+      )
+      break;
+    case "debug":
+      return (<DebugGame exit={()=>{
+        setScene("");
+      }} />);
+
+    default:
+      return (
+        <React.Fragment>
+          <GamehostStatus hidden={false}/>
+          <div className="roomscroll">
+            <div className="stickied">
+              <h1>
+                Welcome, {user ? (user.displayName || props.username) : "Anonymous"}!
+              </h1>
+              <button onClick={async () => {
+                props.setName(null);
+                await userstatus.delete();
+                await auth.currentUser.delete();
+              }}>Sign Out</button>
+              <button onClick={createGame}>Create New Game</button>
+              <button onClick={()=>{
+                setScene("tutorial");
+              }}>How to play</button>
+              <button onClick={()=>{
+                setScene("debug");
+              }}>Game Layout (Debug)</button>
+              {
+                userinfo && userinfo.inGame !== "" ? (<p>
+                  Currently in game <button onClick={()=>{joinRoom(userinfo.inGame)}}>{userinfo.inGame}</button>
+                </p>) : null
+              }
+              <h2>Available Rooms...</h2>
+            </div>
+            {rmav}
+          </div>
+          <Dialog gd={dialog} sd={setDialog} />
+        </React.Fragment>
+      );
   }
 }
 
 function RoomStart(props) {
+  const [ user ] = useAuthState(auth);
   const game = firestore.collection('rooms').doc(props.gameID);
+  const userstatus = !user ? null : firestore.collection('userstates').doc(user.uid);
   const [ dialogMessage, setDialog ] = useState(null);
   const [ gameState, loading, error ] = useDocumentData(game);
-  const [ user ] = useAuthState(auth);
   const spectator = gameState && gameState.players.indexOf(user.uid) === -1;
 
   var playerIndex = spectator ? -1 : (gameState ? gameState.players.indexOf(user.uid) : -1);
 
   const startGame = async () => {
+    if (gameState.started) return;
     if (gameState.playercount <= 1) {
       setDialog("You must have at least 2 players!");
       return;
@@ -643,7 +747,7 @@ function RoomStart(props) {
 
     for (let i = 0; i < gameState.playercount; i++) initializer["p" + String(i+1) + "hand"] = hands[i].map(crd => crd.toString());
 
-    game.set(initializer, {
+    await game.set(initializer, {
       merge: true
     });
     await game.collection('chat').add({
@@ -656,6 +760,7 @@ function RoomStart(props) {
   };
 
   const removeAsPlayer = async (message) => {
+    if (gameState.started) return;
     let players = gameState.players.slice();
     let playernames = gameState.playernames.slice();
     let playercount = gameState.playercount;
@@ -672,7 +777,7 @@ function RoomStart(props) {
         spectate: false
       });
     }
-    game.set({
+    await game.set({
       players: players,
       playernames: playernames,
       playercount: playercount,
@@ -696,13 +801,17 @@ function RoomStart(props) {
         spectate: false
       });
     }
+    userstatus.set({
+      inGame: ""
+    }, {merge: true})
   };
 
   const switchGame = async () => {
+    if (gameState.started) return;
     if (spectator) {
       if (user && gameState) {
         if (gameState.playercount < 4 && gameState.players.indexOf(user.uid) === -1) {
-          game.set({
+          await game.set({
             players: gameState.players.concat([user.uid]),
             playernames: gameState.playernames.concat([user.displayName]),
             playercount: gameState.playercount + 1
@@ -723,7 +832,6 @@ function RoomStart(props) {
   };
 
   const leaveGame = async () => {
-    props.setGame(null)
     if (props.isSpectator) {
       await game.collection('chat').add({
         message: user.displayName + " has left the spectator's booth.",
@@ -732,9 +840,10 @@ function RoomStart(props) {
         timestamp: firebase.firestore.Timestamp.now(),
         spectate: false
       });
+      props.setGame(null);
       return;
     }
-    await removeAsPlayer(user.displayName + " has left.");
+    await removeAsPlayer(user.displayName + " has left.").then(()=>{props.setGame(null)});
   };
 
   const toggleGamemode = async () => {
@@ -760,14 +869,14 @@ function RoomStart(props) {
         spectate: false
       });
     }
-    game.set(settings, {merge: true});
+    await game.set(settings, {merge: true});
   }
 
-  const switchTeams = () => {
+  const switchTeams = async () => {
     if (gameState.gamemode !== "TEM" || playerIndex === -1) return;
     var newlist = gameState.teamdist.slice();
     newlist[playerIndex] = 1 - newlist[playerIndex];
-    game.set({
+    await game.set({
       teamdist: newlist
     }, {merge: true});
   }
@@ -780,7 +889,10 @@ function RoomStart(props) {
           <div key={gameState.playernames[i]} className="rbwrapper" style={{
             backgroundColor: (gameState.gamemode === "FFA" ? "white" : (gameState.teamdist[i] ? "rgb(255,200,200)" : "cyan")),
             fontWeight: (i === playerIndex ? "bold" : "normal")
-          }}>{gameState.playernames[i]}</div>
+          }}>
+            {gameState.playernames[i]} - 
+            <span style={{fontWeight: "normal"}}> {gameState.points[i]} Pts</span>
+          </div>
         </React.Fragment>
       )
     }

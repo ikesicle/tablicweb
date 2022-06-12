@@ -166,14 +166,11 @@ function evaluatePoints(arr) {
 function generateTurnOrder(len) {
   let arr = [], tmp, indx;
   for (let i = 0; i < len; i++) arr.push(i);
-  console.log(arr);
   for (let i = len-1; i >= 1; i--) {
-    indx = ranNum(0,i);
-    if (ranNum(0,1)) {
-      tmp = arr[indx];
-      arr[indx] = arr[i];
-      arr[i] = tmp;
-    }
+    indx = ranNum(0,i+1);
+    tmp = arr[indx];
+    arr[indx] = arr[i];
+    arr[i] = tmp;
   }
   console.log(arr)
   return arr;

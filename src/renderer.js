@@ -59,12 +59,12 @@ function CardVis(props) {
 
 function Talon(props) {
   var cnt = 1;
-  const dff = (window.innerWidth >= 600 ? 17.5 : 21) / 2;
   return (
       <div className="talon-grid">
+        <div className="sectionlabel">Talon</div>
         {props.data && props.data.map(
           crd => <CardVis key={cnt} type={crd} selected={(props.selectedTalon.indexOf(crd) !== -1)} cstyle={{
-            left: "calc(" + String(((cnt++) / (props.data.length + 1) * 70 + 15).toPrecision(4)) + "% - " + String(dff) + (window.innerWidth >= 600 ? "vh)" : "vw)"),
+            left: "calc(" + String(((cnt++) / (props.data.length + 1) * 70 + 15).toPrecision(4)) + "% - 7.7vh",
             animation: "card-creation 0.4s ease-out"
           }}
           onClick={() => {
@@ -79,15 +79,15 @@ function Talon(props) {
 }
 
 function Hand(props) {
-  var cindex = 0;
-  const wd = (window.innerWidth >= 600 ? 17.5 : 21);
-  const hpos = props.data && 50-wd-2.5*(props.data.length-1);
+  let cindex = 0;
+  let startingoffset = 37.5-2.5*(props.data.length-1);
   return (
-    <div className="player-hand" style={{ width: String(wd + 5*(props.data.length-1)) + "vw", left: String(hpos) + "vw"}}>
+    <div className="player-hand">
+      <div className="sectionlabel">Hand</div>
       {props.data && props.data.map( crd =>
         <CardVis key={cindex} type={crd} selected={(props.selectedHand === crd)} 
         cstyle={{
-          left: String((cindex++) * 5) + "vw",
+          left: "calc(" + String(startingoffset + (cindex++) * 5) + "% - 7.7vh)",
           animation: "card-creation 0.4s ease-out",
           zIndex: 7
         }}
@@ -168,11 +168,11 @@ function GameRenderer(props) {
       case 'capture':
         let obj = [];
         let tl = [{easing: "linear", duration: 500}];
-        let dff = (window.innerWidth >= 600 ? 17.5 : 21) / 2;
-
+        let lpos;
         for (let i = 2; i < command.length; i++) {
+          lpos = (gameState.talonprev.indexOf(command[i])+1) / (gameState.talonprev.length + 1) * 70 + 15;
           obj.push(<CardVis key={i} type={command[i]} selected={false} cstyle={{
-            left: "calc(" + String(((gameState.talonprev.indexOf(command[i])+1) / (gameState.talonprev.length + 1) * 70 + 15).toPrecision(4)) + "% - " + String(dff) + (window.innerWidth >= 600 ? "vh)" : "vw)"),
+            left: "calc(" + String((lpos).toPrecision(4)) + "% - 7.7vh",
             bottom: "43vh",
             position: "fixed",
             opacity: 1,
@@ -275,8 +275,8 @@ function GameRenderer(props) {
     const isYourTurn = playerIndex === gameState.turnorder[gameState.turn];
     var playerdata = [];
     playerdata.push(
-      <React.Fragment key={gameState.players[playerIndex]}>
-        <div className="south player">
+      <React.Fragment key={playerIndex}>
+        <div className={"south player" + (spectating ? " spectate" : "")}>
           <div style={{fontWeight: "bold", fontSize: "2vh"}}>{gameState.playernames[playerIndex]}</div>
           <div className="stats">
             <div className="pointcounter">
@@ -285,11 +285,11 @@ function GameRenderer(props) {
             <div className="cardcount">
                 <div className="carddata">
                   {yourHand.length}
-                  <img src={cardcount} alt="Cards in hand" height="15" className="cdisplay" />
+                  <img src={cardcount} alt="Cards in hand" className="cdisplay" />
                 </div>
                 <div className="carddata">
                   {gameState.capturecount[playerIndex]}
-                  <img src={cardcap} alt="Cards captured" height="15" className="cdisplay" />
+                  <img src={cardcap} alt="Cards captured" className="cdisplay" />
                 </div>
               </div>
           </div>
@@ -302,20 +302,20 @@ function GameRenderer(props) {
       let pid = gameState.turnorder[(ti + i) % gameState.playercount];
       playerdata.push(
         <React.Fragment key={pid}>
-          <div className={cardinal[dir]+"player"} onClick={()=>{spectatorSwitch(pid)}}>
+          <div className={cardinal[dir]+"player"+ (spectating ? " spectate" : "")} onClick={()=>{spectatorSwitch(pid)}}>
             <div style={{fontWeight: "bold", fontSize: "2vh"}}>{gameState.playernames[pid]}</div>
             <div className="stats">
               <div className="pointcounter">
-                <span style={{fontSize: "6vh", fontWeight: "bold"}}>{gameState.points[pid]}</span> PTS
+                <span className="pcnum">{gameState.points[pid]}</span> PTS
               </div>
               <div className="cardcount">
                 <div className="carddata">
                   {gameState["p" + String(pid+1) + "hand"].length}
-                  <img src={cardcount} alt="Cards in hand" height="15" className="cdisplay" />
+                  <img src={cardcount} alt="Cards in hand" className="cdisplay" />
                 </div>
                 <div className="carddata">
                   {gameState.capturecount[pid]}
-                  <img src={cardcap} alt="Cards captured" height="15" className="cdisplay" />
+                  <img src={cardcap} alt="Cards captured" className="cdisplay" />
                 </div>
               </div>
             </div>

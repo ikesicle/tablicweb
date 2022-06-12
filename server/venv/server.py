@@ -12,6 +12,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from waitress import serve
 from flask_cors import CORS as cors
+import copy
 
 path = os.path.dirname(os.path.abspath(__file__))
 
@@ -70,8 +71,11 @@ async def gamehost():
     roomsnapshot = room.get()
     if not roomsnapshot.exists: return rejectRequest(404, "Room no longer exists.")
     roomsnapshot = roomsnapshot._data
+    
+    cpind = roomsnapshot["turnorder"][roomsnapshot["turn"]]
+    cp = "p" + str(cpind+1) + "hand"
 
-    def redistributeCards():
+    def redistributeCards(): # Redistirubtes cards as evenly as possible.
       hands = {
         "p1hand": [],
         "p2hand": [],
@@ -90,7 +94,7 @@ async def gamehost():
       hands["deck"] = newdeck
       room.update(hands)
 
-    def endTurnAndStartNext():
+    def endTurnAndStartNext(): # Ends the current turn and starts next. Redeals if hands are empty, and ends game if deck is empty.
       room.update({
         "turn": (roomsnapshot["turn"]+1) % roomsnapshot["playercount"],
         "date": datetime.now(tz=timezone.utc)
@@ -98,11 +102,16 @@ async def gamehost():
       if not bool(newhand) and roomsnapshot["turn"] == roomsnapshot["playercount"] - 1:
           if not roomsnapshot["deck"]:
             # End Game
-            capturecount = roomsnapshot["capturecount"]
-            points = roomsnapshot["points"]
-            points[capturecount.index(max(capturecount))] += 3
-            winner = roomsnapshot["playernames"][points.index(max(points))]
-            winnerscore = max(points)
+            indx = roomsnapshot["capturecount"].index(max(roomsnapshot["capturecount"]))
+            if roomsnapshot["points"].count(roomsnapshot["points"][indx]) == 1: roomsnapshot["points"][indx] += 3
+
+            winnerscore = max(roomsnapshot["points"])
+            winners = []
+            for i in range(0,roomsnapshot["playercount"]):
+              if (roomsnapshot["points"][i] == winnerscore): winners.append(roomsnapshot["playernames"][i])
+
+            winner = ", ".join(winners)
+            # Implementing draws
             if roomsnapshot["gamemode"] == "TEM":
               blue = 0
               red = 0
@@ -123,52 +132,67 @@ async def gamehost():
               "started": False,
               "winner": winner,
               "winnerscore": winnerscore,
-              "points": points
+              "points": roomsnapshot["points"]
             })
           redistributeCards()
       if roomsnapshot["playercount"] == 1:
         room.update({
           "started": False,
-          "winner": roomsnapshot["playernames"][0]
+          "winner": roomsnapshot["playernames"][0],
+          "points": roomsnapshot["points"][0]
         })
 
-    def removePlayer():
+    def removePlayer(): # Removes the current player from play.
       hands = [roomsnapshot["p1hand"],roomsnapshot["p2hand"],roomsnapshot["p3hand"],roomsnapshot["p4hand"]]
-      players = roomsnapshot["players"]
-      pnames = roomsnapshot["playernames"]
       pcnt = roomsnapshot["playercount"]
-      for i in range(roomsnapshot["turn"],pcnt-1):
-        hands[i] = hands[i+1]
-        players[i] = players[i+1]
-        pnames[i] = pnames[i+1]
-      hands[3] = []
+      userToModify = fstore.document("userstates/"+roomsnapshot["players"][cpind])
+      userToModify.update({
+        "inGame" : ""
+      })
+      
       pcnt -= 1
-      del pnames[pcnt]
-      del players[pcnt]
+      del hands[cpind]
+      del roomsnapshot["playernames"][cpind]
+      del roomsnapshot["players"][cpind]
+      del roomsnapshot["capturecount"][cpind]
+      del roomsnapshot["teamdist"][cpind]
+      del roomsnapshot["points"][cpind]
+      roomsnapshot["turnorder"].remove(roomsnapshot["turn"])
+      roomsnapshot["turnorder"] = list(map(lambda x: x-1 if x > cpind else x, roomsnapshot["turnorder"]))
+      hands.append([])
+      roomsnapshot["capturecount"].append(0)
+      roomsnapshot["teamdist"].append(0)
+      roomsnapshot["points"].append(0)
+
+      print(cpind)
+      print(roomsnapshot["players"])
 
       room.update({
         "p1hand": hands[0],
         "p2hand": hands[1],
         "p3hand": hands[2],
         "p4hand": hands[3],
-        "players": players,
-        "playernames": pnames,
+        "players": roomsnapshot["players"],
+        "playernames": roomsnapshot["playernames"],
         "playercount": pcnt,
         "turn": roomsnapshot["turn"]%pcnt,
-        "turnorder": roomsnapshot["turnorder"][:roomsnapshot["turn"]] + roomsnapshot["turnorder"][roomsnapshot["turn"]+1:]
+        "turnorder": roomsnapshot["turnorder"],
+        "capturecount": roomsnapshot["capturecount"],
+        "teamdist": roomsnapshot["teamdist"],
+        "points": roomsnapshot["points"]
       })
 
-      teamNoContinue = roomsnapshot["gamemode"] == "TEM" and (roomsnapshot["teamdist"].count(1) == 0 or roomsnapshot["teamdist"].count(1) == 0)
+      teamNoContinue = roomsnapshot["gamemode"] == "TEM" and roomsnapshot["teamdist"].count(1) == 0
       if pcnt == 1 or teamNoContinue:
         room.update({
-          "started": False
+          "started": False,
+          "winner": "Game ended prematurely",
+          "points": [0,0,0,0],
+          "winnerscore": "NaN"
         })
 
     if actiondata["datatype"] == "turn":
-      cpind = roomsnapshot["turnorder"][roomsnapshot["turn"]]
-      cp = "p" + str(cpind+1) + "hand"
       if roomsnapshot["players"][cpind] != userid: return rejectRequest(403, "Not your turn!")
-
       if not roomsnapshot["started"]: return rejectRequest(403, "Game not started")
       
       if actiondata["type"] == "play":
@@ -234,7 +258,7 @@ async def gamehost():
   return rejectRequest(501, "Unsupported HTTP Method.")
 
 if __name__ == "__main__":
-  app.run(host='0.0.0.0', port=3001, debug=True, use_reloader=True)
-  #serve(app, port=int(os.environ.get("PORT", 8080)))
+  #app.run(host='0.0.0.0', port=3001, debug=True, use_reloader=True)
+  serve(app, port=int(os.environ.get("PORT", 8080)))
 
   
