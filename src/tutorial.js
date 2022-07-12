@@ -355,7 +355,7 @@ function Tutorial(props) {
     points: [yourPoints, 0, 0, 0],
     capturecount: [captureCount, 0, 0, 0],
     roomname: "Tutorial",
-    started: true,
+    started: "play",
     talon: talon,
     talonprev: talonprev,
     turn: turn,

@@ -469,6 +469,7 @@ input[type=text]:focus {
 }
 
 .carddata {
+  width: 50%;
   text-align: center;
   flex-grow: 2;
 }
@@ -632,6 +633,15 @@ input[type=text]:focus {
   background-color: rgba(0,0,0,0.5);
   color: white;
   z-index: 6;
+}
+
+.blue {
+  border-color: blue;
+  background-color: rgba(0,0,255,0.2);
+}
+.red {
+  border-color: red;
+  background-color: rgba(255,0,0,0.2);
 }
 
 @media only screen and (max-aspect-ratio: 1/1) {

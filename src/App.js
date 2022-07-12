@@ -1,6 +1,6 @@
 import twlogo from './logo.png';
 import './App.css';
-import { Deck, generateTurnOrder } from './tablic.js'
+import { Deck, generateTurnOrder, ranNum } from './tablic.js'
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 import 'firebase/compat/auth';
@@ -110,10 +110,6 @@ function CheatSheet(props) {
           <tr>
             <th style={{width: "50%"}}>Card Type</th>
             <th style={{width: "50%"}}>Points yield</th>
-          </tr>
-          <tr>
-            <td>2 ♣</td>
-            <td>2</td>
           </tr>
           <tr>
             <td>10 ♦</td>
@@ -261,11 +257,12 @@ function NetworkGame(props) {
   };
 
   useEffect(()=> {
-    if (gameState && gameState.started) {
-      setTime("30");
+    if (gameState && gameState.started === "play") {
+      setTime(30);
       setSpeed(100);
     }
     else {
+      setTime("--")
       setSpeed(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,6 +270,7 @@ function NetworkGame(props) {
 
   useInterval(async ()=> { // Credit to Dan Abramov (https://overreacted.io/) for this
     if (time <= 0) {
+      console.log("Sending card!")
       setSpeed(null)
       setTime(0)
       await requestUpdate();
@@ -333,7 +331,7 @@ function DebugGame(props) {
     points: [0, 0, 0, 0],
     capturecount: [0, 0, 0, 0],
     roomname: "Debug CSS Room",
-    started: true,
+    started: "play",
     talon: ["36","27","18","49","1K"],
     talonprev: [],
     turn: 0,
@@ -419,7 +417,6 @@ function Login(props) {
 }
 
 function Chat(props) {
-  
   const [ messageValue, setMessage ] = useState("");
   const [ chatState, setChatState ] = useState(false);
   const top = useRef(null);
@@ -558,7 +555,10 @@ function RoomSelect(props) {
       props.setGame(rm);
     }
     else if (!(gamedata)) {
-      setDialog("Can't access room data.");
+      setDialog("Can't access room data. There may be a problem with your connection, or the room may have been deleted.");
+      await userstatus.set({
+        inGame: ""
+      }, {merge: true});
     }
   };
 
@@ -583,7 +583,7 @@ function RoomSelect(props) {
       points: Array(4).fill(0),
       capturecount: Array(4).fill(0),
       roomname: user.displayName + "'s Room",
-      started: false,
+      started: "",
       talon: [],
       talonprev: [],
       turn: 0,
@@ -701,7 +701,7 @@ function RoomStart(props) {
         if (elem === 1) reds++;
         else blues++;
       });
-      if (blues === 0 || reds === 0) {
+      if ((blues !== reds)) {
         setDialog("Cannot have empty teams!");
         return;
       }
@@ -733,17 +733,37 @@ function RoomStart(props) {
     var hands = [];
     for (let i = 0; i < gameState.playercount; i++) hands.push(gameState.gamemode === "TEM" ? deck.DealCard(3) : deck.DealCard(6));
 
+    var torder = [];
+    if (gameState.gamemode === "FFA") torder = generateTurnOrder(gameState.playercount);
+    else if (gameState.gamemode === "TEM") {
+      var teams = [[],[]];
+      for (let i = 0; i < 4; i++) {
+        teams[gameState.teamdist[i]].push(i);
+      }
+      var seed = ranNum(1,10);
+      var seed2 = ranNum(1,10);
+      for (let i = 0; i < 4; i++) {
+        torder.push(teams[(i+seed)%2][Math.floor((i+seed2)/2)%2]);
+      }
+    }
     var initializer = {
       deck: deck.deck.map(crd => crd.toString()),
       talon: talon.map(crd => crd.toString()),
       points: [0,0,0,0],
       capturecount: [0,0,0,0],
-      started: true,
+      started: "play",
       turn: 0,
       lastPlay: "game start",
       date: firebase.firestore.Timestamp.now(),
-      turnorder: generateTurnOrder(gameState.playercount)
+      turnorder: torder
     }
+
+    var toMSG = "Turn order is ";
+    torder.forEach((num) => {
+      toMSG += gameState.playernames[num] + " -> ";
+    });
+    toMSG += "(Restart)";
+
 
     for (let i = 0; i < gameState.playercount; i++) initializer["p" + String(i+1) + "hand"] = hands[i].map(crd => crd.toString());
 
@@ -752,6 +772,13 @@ function RoomStart(props) {
     });
     await game.collection('chat').add({
       message: "Game started. Player and spectator chats are now separate.",
+      senderID: "0",
+      senderName: "[ System ]",
+      timestamp: firebase.firestore.Timestamp.now(),
+      spectate: false
+    });
+    game.collection('chat').add({
+      message: toMSG,
       senderID: "0",
       senderName: "[ System ]",
       timestamp: firebase.firestore.Timestamp.now(),
@@ -801,7 +828,7 @@ function RoomStart(props) {
         spectate: false
       });
     }
-    userstatus.set({
+    await userstatus.set({
       inGame: ""
     }, {merge: true})
   };

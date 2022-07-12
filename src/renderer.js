@@ -166,6 +166,7 @@ function GameRenderer(props) {
     let command = gameState.lastPlay.split(' ');
     switch (command[0]) {
       case 'capture':
+        if (command.length < 2) break;
         let obj = [];
         let tl = [{easing: "linear", duration: 500}];
         let lpos;
@@ -231,7 +232,7 @@ function GameRenderer(props) {
             setAnimation(null); }
         });
 
-        if (gameState.talon.length === 0) {
+        if (gameState.talon.length === 0 && gameState.started === "playing") {
           tl = tl.concat([{
             targets: '.animation .allclear',
             easing: "easeOutQuad",
@@ -261,10 +262,10 @@ function GameRenderer(props) {
             setAnimation(null); }
           }]);
         }
-
         setAnimation(tl);
-
         break;
+
+
       default:
         break;
     }
@@ -274,9 +275,10 @@ function GameRenderer(props) {
     const yourHand = gameState["p" + String(playerIndex+1) + "hand"];
     const isYourTurn = playerIndex === gameState.turnorder[gameState.turn];
     var playerdata = [];
+    var teamcolors = gameState.gamemode === "TEM" ? gameState.teamdist.map(x => x ? " blue" : " red") : ["","","",""]
     playerdata.push(
       <React.Fragment key={playerIndex}>
-        <div className={"south player" + (spectating ? " spectate" : "")}>
+        <div className={"south player" + (spectating ? " spectate" : "") + teamcolors[playerIndex]}>
           <div style={{fontWeight: "bold", fontSize: "2vh"}}>{gameState.playernames[playerIndex]}</div>
           <div className="stats">
             <div className="pointcounter">
@@ -302,7 +304,7 @@ function GameRenderer(props) {
       let pid = gameState.turnorder[(ti + i) % gameState.playercount];
       playerdata.push(
         <React.Fragment key={pid}>
-          <div className={cardinal[dir]+"player"+ (spectating ? " spectate" : "")} onClick={()=>{spectatorSwitch(pid)}}>
+          <div className={cardinal[dir]+"player"+ (spectating ? " spectate" : "") + teamcolors[pid]} onClick={()=>{spectatorSwitch(pid)}}>
             <div style={{fontWeight: "bold", fontSize: "2vh"}}>{gameState.playernames[pid]}</div>
             <div className="stats">
               <div className="pointcounter">
@@ -333,13 +335,14 @@ function GameRenderer(props) {
         
         { playerdata }
 
-        <Talon className="talon" data={gameState.talon} selectTalon={spectating ? ()=>{} : selectTalon} selectedTalon={spectating ? [] : selectedTalon} />
+        { <Talon className="talon" data={gameState.talon} selectTalon={spectating ? ()=>{} : selectTalon} selectedTalon={spectating ? [] : selectedTalon} /> }
         
         <div className={"turnindicator" + (isYourTurn ? " current" : "")} >
-          {isYourTurn && !spectating ? "Your" : gameState.playernames[gameState.turnorder[gameState.turn]] + "'s"} turn
+          { gameState.started === "play" ? (isYourTurn && !spectating ? "Your" : gameState.playernames[gameState.turnorder[gameState.turn]] + "'s ") + "turn" : "Good Game" }
         </div>
+
         <div className={"turntimer" + (isYourTurn ? " current" : "")}>
-          {props.time}
+          { gameState.started === "ending" ? "Game End" : props.time }
         </div>
       </React.Fragment>
     )

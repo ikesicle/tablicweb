@@ -4,7 +4,6 @@ const NUMBER_OF_CARDS = 52;
 const faceabbrs = [ "A", "2", "3", "4", "5", "6", "7", "8", "9", "0", "J", "Q", "K" ];
 const suitabbrs = [ "1", "2", "3", "4" ]
 const SPECIAL_CARDS = {
-  "12": 2,
   "40": 2
 };
 
