@@ -4,43 +4,16 @@ import cardcount from './cardcount.png';
 import cardcap from './cardcap.png';
 import { verifyCap, Card, evaluatePoints } from './tablic.js';
 import anime from './anime.es.js';
-
+import { text, fmt } from './locales.js';
+import DOMPurify from 'dompurify';
 
 const cardinal = ["east ", "north ", "west "];
-const portraitcoords = {
-  north: {
-    left: "calc(16.5vw - 7vh)",
-    bottom: "72vh"
-  },
-  east: {
-    left: "calc(49.5vw - 7vh)",
-    bottom: "72vh"
-  },
-  west: {
-    left: "calc(82.5vw - 7vh)",
-    bottom: "72vh"
-  }
-};
-const landscapecoords = {
-  north: {
-    left: "calc(10vw + 160px - 7vh)",
-    bottom: "70vh"
-  },
-  east: {
-    left: "calc(10vw + 50px - 7vh)",
-    bottom: "70vh"
-  },
-  west: {
-    left: "calc(10vw + 270px - 7vh)",
-    bottom: "70vh"
-  }
-};
 
 function Dialog(props) {
   return (
     <div className="dialog" style={props.gd ? {opacity: "1"} : {top: "-40vh", opacity: "0"}}>
       <div style={{flexGrow: "10"}}> {props.gd} </div>
-      <button className="closedialog" onClick={()=>props.sd(null)}>Ok</button>
+      <button className="closedialog" onClick={()=>props.sd(null)}>{text.Inputs.OkButton}</button>
     </div>
   );
 }
@@ -61,9 +34,9 @@ function Talon(props) {
   var cnt = 1;
   return (
       <div className="talon-grid">
-        <div className="sectionlabel">Talon</div>
+        <div className="sectionlabel">{text.UIText.Talon}</div>
         {props.data && props.data.map(
-          crd => <CardVis key={cnt} type={crd} selected={(props.selectedTalon.indexOf(crd) !== -1)} cstyle={{
+          crd => <CardVis key={crd} type={crd} selected={(props.selectedTalon.indexOf(crd) !== -1)} cstyle={{
             left: "calc(" + String(((cnt++) / (props.data.length + 1) * 70 + 15).toPrecision(4)) + "% - 7.7vh",
             animation: "card-creation 0.4s ease-out"
           }}
@@ -83,7 +56,7 @@ function Hand(props) {
   let startingoffset = 37.5-2.5*(props.data.length-1);
   return (
     <div className="player-hand">
-      <div className="sectionlabel">Hand</div>
+      <div className="sectionlabel">{text.UIText.Hand}</div>
       {props.data && props.data.map( crd =>
         <CardVis key={cindex} type={crd} selected={(props.selectedHand === crd)} 
         cstyle={{
@@ -145,13 +118,13 @@ function GameRenderer(props) {
 
     const actiontype = selectedTalon.length === 0 ? "play" : "capture";
     if (!selectedHand) {
-      setDialog("Select a card to play first!");
+      setDialog(text.Dialogs.SelectCard);
       return;
     }
 
 
     if (actiontype === "capture" && !verifyCap(selectedTalon.map(crd => (new Card(crd)).value()), (new Card(selectedHand)).value())) {
-      setDialog("Invalid Card Combination!")
+      setDialog(text.Dialogs.InvalidCombo)
       return;
     }
 
@@ -194,8 +167,10 @@ function GameRenderer(props) {
 
         obj.push(<div className="pointscard" style={{transform: "scaleX(0)"}}>+{evaluatePoints(command.slice(1))}</div>)
 
-        if (gameState.talon.length === 0) obj.push(<div className="allclear">All Clear</div>)
-        
+        if (gameState.talon.length === 0 && gameState.started === "play") {
+          obj.push(<div className="allclear">{text.MiscText.AllClear}</div>)
+        }
+
         setObjects(obj);
 
         tl.push({
@@ -227,12 +202,12 @@ function GameRenderer(props) {
           opacity: 0,
           duration: 500,
           delay: 1000,
-          complete: gameState.talon.length === 0 ? ()=>{} : (anim) => {
+          complete: gameState.talon.length === 0 && gameState.started === "play" ? ()=>{} : ()=>{
             setObjects([]); 
             setAnimation(null); }
         });
 
-        if (gameState.talon.length === 0 && gameState.started === "playing") {
+        if (gameState.talon.length === 0 && gameState.started === "play") {
           tl = tl.concat([{
             targets: '.animation .allclear',
             easing: "easeOutQuad",
@@ -273,27 +248,39 @@ function GameRenderer(props) {
   
   if (gameState) {
     const yourHand = gameState["p" + String(playerIndex+1) + "hand"];
-    const isYourTurn = playerIndex === gameState.turnorder[gameState.turn];
+    const cpturn = gameState.turnorder[gameState.turn];
+    const isYourTurn = playerIndex === cpturn;
     var playerdata = [];
     var teamcolors = gameState.gamemode === "TEM" ? gameState.teamdist.map(x => x ? " blue" : " red") : ["","","",""]
     playerdata.push(
-      <React.Fragment key={playerIndex}>
-        <div className={"south player" + (spectating ? " spectate" : "") + teamcolors[playerIndex]}>
-          <div style={{fontWeight: "bold", fontSize: "2vh"}}>{gameState.playernames[playerIndex]}</div>
-          <div className="stats">
-            <div className="pointcounter">
-              <span style={{fontSize: "6vh", fontWeight: "bold"}}>{gameState.points[playerIndex]}</span> PTS
-            </div>
-            <div className="cardcount">
-                <div className="carddata">
-                  {yourHand.length}
-                  <img src={cardcount} alt="Cards in hand" className="cdisplay" />
-                </div>
-                <div className="carddata">
-                  {gameState.capturecount[playerIndex]}
-                  <img src={cardcap} alt="Cards captured" className="cdisplay" />
-                </div>
+      <React.Fragment key="south ">
+        <div className={
+          "south playershadow"
+          + teamcolors[playerIndex] 
+        }>
+          <div 
+            className={
+              "player"
+              + (spectating ? " spectate" : "")
+              + (isYourTurn ? " np" : "")
+            }
+          >
+            <div style={{fontWeight: "bold", fontSize: "2vh"}}>{gameState.playernames[playerIndex]}</div>
+            <div className="stats">
+              <div className="pointcounter">
+                <span style={{fontSize: "6vh", fontWeight: "bold"}}>{gameState.points[playerIndex]}</span>{text.UIText.PointsAbbrv}
               </div>
+              <div className="cardcount">
+                  <div className="carddata">
+                    {yourHand.length}
+                    <img src={cardcount} alt="Cards in hand" className="cdisplay" />
+                  </div>
+                  <div className="carddata">
+                    {gameState.capturecount[playerIndex]}
+                    <img src={cardcap} alt="Cards captured" className="cdisplay" />
+                  </div>
+                </div>
+            </div>
           </div>
         </div>
       </React.Fragment>
@@ -303,21 +290,34 @@ function GameRenderer(props) {
       let ti = gameState.turnorder.indexOf(playerIndex);
       let pid = gameState.turnorder[(ti + i) % gameState.playercount];
       playerdata.push(
-        <React.Fragment key={pid}>
-          <div className={cardinal[dir]+"player"+ (spectating ? " spectate" : "") + teamcolors[pid]} onClick={()=>{spectatorSwitch(pid)}}>
-            <div style={{fontWeight: "bold", fontSize: "2vh"}}>{gameState.playernames[pid]}</div>
-            <div className="stats">
-              <div className="pointcounter">
-                <span className="pcnum">{gameState.points[pid]}</span> PTS
-              </div>
-              <div className="cardcount">
-                <div className="carddata">
-                  {gameState["p" + String(pid+1) + "hand"].length}
-                  <img src={cardcount} alt="Cards in hand" className="cdisplay" />
+        <React.Fragment key={cardinal[dir]}>
+          <div className={
+            cardinal[dir]
+            + "playershadow"
+            + teamcolors[pid]
+          }>
+            <div 
+              className={
+                "player"
+                + (spectating ? " spectate" : "")
+                + (pid === cpturn ? " np" : "")
+              }
+              onClick={()=>{spectatorSwitch(pid)}}
+            >
+              <div style={{fontWeight: "bold", fontSize: "2vh"}}>{gameState.playernames[pid]}</div>
+              <div className="stats">
+                <div className="pointcounter">
+                  <span className="pcnum">{gameState.points[pid]}</span>{text.UIText.PointsAbbrv}
                 </div>
-                <div className="carddata">
-                  {gameState.capturecount[pid]}
-                  <img src={cardcap} alt="Cards captured" className="cdisplay" />
+                <div className="cardcount">
+                  <div className="carddata">
+                    {gameState["p" + String(pid+1) + "hand"].length}
+                    <img src={cardcount} alt="Cards in hand" className="cdisplay" />
+                  </div>
+                  <div className="carddata">
+                    {gameState.capturecount[pid]}
+                    <img src={cardcap} alt="Cards captured" className="cdisplay" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -331,18 +331,18 @@ function GameRenderer(props) {
         <AnimationContext animation={currentAnimation} content={animatedObjects} />
         <Dialog gd={getDialog} sd={setDialog} />
         <Hand data={yourHand} selectHand={spectating ? ()=>{} : selectHand} selectedHand={spectating ? [] : selectedHand}/>
-        { spectating ? (<div className="spectating">Spectating {gameState.playernames[playerIndex]}</div>) : <button className="pushaction" onClick={preprocess} disabled={gameState.turnorder[gameState.turn] !== playerIndex}>{ selectedTalon.length === 0 ? "Play" : "Capture"}</button> }
+        { spectating ? (<div className="spectating">Spectating {gameState.playernames[playerIndex]}</div>) : <button className="pushaction" onClick={preprocess} disabled={gameState.turnorder[gameState.turn] !== playerIndex}>{ selectedTalon.length === 0 ? text.Inputs.PlayCard : text.Inputs.CaptureCard}</button> }
         
         { playerdata }
 
         { <Talon className="talon" data={gameState.talon} selectTalon={spectating ? ()=>{} : selectTalon} selectedTalon={spectating ? [] : selectedTalon} /> }
         
         <div className={"turnindicator" + (isYourTurn ? " current" : "")} >
-          { gameState.started === "play" ? (isYourTurn && !spectating ? "Your" : gameState.playernames[gameState.turnorder[gameState.turn]] + "'s ") + "turn" : "Good Game" }
+          { gameState.started === "play" ? (isYourTurn && !spectating ? text.UIText.YourTurn : fmt(text.UIText.OtherTurn, {name: gameState.playernames[cpturn]})) : text.UIText.GoodGame }
         </div>
 
         <div className={"turntimer" + (isYourTurn ? " current" : "")}>
-          { gameState.started === "ending" ? "Game End" : props.time }
+          { gameState.started === "ending" ? text.UIText.GameEnd : props.time }
         </div>
       </React.Fragment>
     )

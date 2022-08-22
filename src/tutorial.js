@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { evaluatePoints } from './tablic.js';
 import { GameRenderer } from './renderer.js';
+import { LocaleManager, fmt } from './locales.js';
+import DOMPurify from 'dompurify';
 
 function TutorialDialog(props) {
   var style = {zIndex: 9};
@@ -41,7 +43,7 @@ function TutorialOverlay(props) {
           w="80vw"
           h="20vh"
          />
-         <div className="screencover" style={{backgroundColor: "rgba(0,0,0,0.5)"}} key="selector"></div>
+         <div className="screencover" style={{backgroundColor: "rgba(0,0,0,0.5)"}} key="cover"></div>
       </React.Fragment>);
       break;
 
@@ -54,7 +56,7 @@ function TutorialOverlay(props) {
           xp="19vw"
           w="60vw"
          />
-        <div className="selectborder player south" key="selector"> </div>
+        <div className="south playershadow np selectborder" key="selector"></div>
         <div className="screencover" key="cover"></div>
       </React.Fragment>);
       break;
@@ -218,12 +220,12 @@ function TutorialOverlay(props) {
               <th style={{width: "50%"}}>Points yield</th>
             </tr>
             <tr>
-              <td>2 ♣</td>
+              <td>10 ♦</td>
               <td>2</td>
             </tr>
             <tr>
-              <td>10 ♦</td>
-              <td>2</td>
+              <td>2 ♣</td>
+              <td>1</td>
             </tr>
             <tr>
               <td>Other Tens (10)</td>
@@ -306,7 +308,6 @@ function TutorialOverlay(props) {
               <li>The game continues until there are no more cards in the players' hands or the deck.</li>
             </ul>
             <p>That's all for now! Have fun on <b>TablicWeb</b>!</p>
-
           </>)}
           onclose={() => {
             props.setEvent(11);

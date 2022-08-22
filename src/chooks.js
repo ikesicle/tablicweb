@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { text, currentLocale } from './locales.js'
 
 function useInterval(callback, delay) {
 	const savedCallback = useRef();
@@ -19,4 +20,4 @@ function useInterval(callback, delay) {
 	}, [delay]);
 }
 
-export default useInterval;
+export { useInterval };

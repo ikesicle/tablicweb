@@ -8,14 +8,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { useDocumentData, useCollection, useDocument } from 'react-firebase-hooks/firestore';
 import { firebaseConfig, server } from './cfg.js';
-import useInterval from './chooks.js';
+import { useInterval, useLocale } from './chooks.js';
 import { Dialog, GameRenderer } from './renderer.js';
 import Tutorial from './tutorial.js';
+import { text, fmt, setLocale, currentLocale, locales } from './locales.js';
+import DOMPurify from 'dompurify';
+import { motion, AnimatePresence } from "framer-motion";
+
+
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const firestore = firebase.firestore();
 const gamehost = server + "/gamehost";
+const purify = DOMPurify.sanitize;
+const opacityIn = { opacity: 1 };
+const opacityOut = { opacity: 0 };
 
 function GamehostStatus(props) {
   const [ status, setStatus ] = useState(false);
@@ -40,7 +48,7 @@ function GamehostStatus(props) {
 
   if (!props.hidden) return ( <React.Fragment>
     <div className="statusbox" style={{border: "2px solid", borderColor: status ? "green" : "red", backgroundColor: status ? "rgba(0,255,0,0.2)" : "rgba(255,0,0,0.2)"}}>
-      Status: <span style={{fontWeight: "bold"}}>{status ? "Online" : "Offline"}</span>
+      {text.UIText.Status}<span style={{fontWeight: "bold"}}>{status ? text.UIText.Online : text.UIText.Offline}</span>
     </div>
   </React.Fragment>
   );
@@ -48,6 +56,21 @@ function GamehostStatus(props) {
     <React.Fragment>
     </React.Fragment>
   );
+}
+
+function LanguageSelect(props) {
+  var langoptions = [];
+  Object.getOwnPropertyNames(locales).forEach(lang=>{
+    langoptions.push(<option key={lang} value={lang} defaultValue={currentLocale === lang}>{lang}</option>)
+  });
+  return (<React.Fragment>
+    <select name="lang" id="lang" className="langselectbar" onChange={(e)=>{
+        setLocale(e.target.value);
+        props.postChange(text.Dialogs.OnLangChange || "Language successfully changed!");
+    }}>
+      { langoptions }
+    </select>
+  </React.Fragment>)
 }
 
 function CheatSheet(props) {
@@ -59,15 +82,10 @@ function CheatSheet(props) {
     case 0: // Basic rules + controls
       data = (<>
         <ul>
-          <li>
-            <b>Click</b> on cards to <b>select</b> them.
-          </li>
-          <li>
-            <b>Play</b> a card by selecting from your hand (bottom row of cards) and clicking Play.
-          </li>
-          <li>
-            <b>Capture</b> cards from the <b>talon</b> (middle of board) by selecting cards to capture from the talon and a card to capture from your hand.
-          </li>
+          <li dangerouslySetInnerHTML={{__html: text.Guidebook.Rules1}}/>
+          <li dangerouslySetInnerHTML={{__html: text.Guidebook.Rules2}}/>
+          <li dangerouslySetInnerHTML={{__html: text.Guidebook.Rules3}}/>
+          <li dangerouslySetInnerHTML={{__html: text.Guidebook.Rules4}}/>
         </ul>
       </>);
       break;
@@ -80,23 +98,23 @@ function CheatSheet(props) {
             <th style={{width: "50%"}}>Value</th>
           </tr>
           <tr>
-            <td>Numbers</td>
-            <td>As Written</td>
+            <td>{text.Guidebook.SymbolNumbers}</td>
+            <td>{text.Guidebook.ValueNumbers}</td>
           </tr>
           <tr>
-            <td>Aces (A)</td>
-            <td><b>Variable</b>; can be 1 or 11</td>
+            <td>{text.Guidebook.SymbolA}</td>
+            <td dangerouslySetInnerHTML={{__html: text.Guidebook.ValueA}}/>
           </tr>
           <tr>
-            <td>Jacks (J)</td>
+            <td>{text.Guidebook.SymbolJ}</td>
             <td>12</td>
           </tr>
           <tr>
-            <td>Queens (Q)</td>
+            <td>{text.Guidebook.SymbolQ}</td>
             <td>13</td>
           </tr>
           <tr>
-            <td>Kings (K)</td>
+            <td>{text.Guidebook.SymbolK}</td>
             <td>14</td>
           </tr>
           </tbody>
@@ -115,6 +133,10 @@ function CheatSheet(props) {
             <td>10 ♦</td>
             <td>2</td>
           </tr>
+          <tr>
+              <td>2 ♣</td>
+              <td>1</td>
+            </tr>
           <tr>
             <td>Other Tens (10)</td>
             <td>1</td>
@@ -143,15 +165,14 @@ function CheatSheet(props) {
       data = "Invalid Entry";
       break;
   }
-
   return (<>
     <div className="cheatsheet">
       <div className="csnavsup">
-        <button className="csopen" onClick={()=>{setNav(!navOpen); setOpen(false);}}>Reference</button>
+        <button className="csopen" onClick={()=>{setNav(!navOpen); setOpen(false);}}>{text.Inputs.Guidebook}</button>
         <div className="csnavsub" style={ navOpen ? {} : {width: 0}}>
-          <button onClick={()=>{setTab(0)}} onClick={()=>{setOpen(true);setTab(0);}}>Rules</button>
-          <button onClick={()=>{setTab(1)}} onClick={()=>{setOpen(true);setTab(1);}}>Values</button>
-          <button onClick={()=>{setTab(2)}} onClick={()=>{setOpen(true);setTab(2);}}>Points</button>
+          <button onClick={()=>{setOpen(true);setTab(0);}}>{text.Inputs.RulesTab}</button>
+          <button onClick={()=>{setOpen(true);setTab(1);}}>{text.Inputs.ValuesTab}</button>
+          <button onClick={()=>{setOpen(true);setTab(2);}}>{text.Inputs.PointsTab}</button>
         </div>
       </div>
       <div className="cstabcontent" style={open ? {} : {height: 0, width: 0, opacity: 0}}>
@@ -282,38 +303,49 @@ function NetworkGame(props) {
     }
   }, timerSpeed);
 
+  var content;
+
   if (!auth.currentUser) {
-    return (<React.Fragment>
-      An unexpected error occurred - GAME component.
+    content = (<React.Fragment>
+      {fmt(text.MiscText.ErrorComponent, {component: "Game"})}
     </React.Fragment>)
   }
 
   if (gameState) {
     if (gameState.started) {
-      return (
-        <React.Fragment>
+      content = (
+        <motion.div key="ingame" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
           <GameRenderer gameState={gameState} spectating={spectator} onPlay={sendAction} playerID={playerIndex} time={time} getDialog={dialogMessage} setDialog={setDialog}/>
           <CheatSheet />
           <Chat gameStarted={true} isSpectator={spectator} game={game} context={"ingame"}/>
-        </React.Fragment>
-
+        </motion.div>
       )
-    } else return <RoomStart gameID={props.gameID} setGame={props.setGame} isSpectator={spectator}/>
-  } else if (!error) { return (
-      <React.Fragment>
-        <div style={{transform: "translateY(50vh)"}}>Loading...</div>
-        <button className="closedialog" style={{transform: "translateY(50vh)"}} onClick={()=>props.setGame(null)}>Return to menu</button>
-      </React.Fragment>
+    } else content = (
+        <motion.div key="lobby" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
+          <RoomStart gameID={props.gameID} setGame={props.setGame} isSpectator={spectator}/> 
+        </motion.div>
+      );
+  } else if (!error) { content = (
+      <motion.div key="loading" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
+        <div style={{transform: "translateY(50vh)"}}>{text.UIText.Loading}</div>
+        <button className="closedialog" style={{transform: "translateY(50vh)"}} onClick={()=>props.setGame(null)}>{text.UIText.MenuReturn}</button>
+      </motion.div>
     )} else {
-    return (
-      <React.Fragment>
+    content = (
+      <motion.div key="error" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
         <div className="dialog">
-          <div style={{transform: "translateY(50vh)"}}>An unexpected error occurred while loading.</div>
-          <button className="closedialog" style={{transform: "translateY(50vh)"}} onClick={()=>props.setGame(null)}>Return to menu</button>
+          <div style={{transform: "translateY(50vh)"}}>{text.MiscText.ErrorLoading}</div>
+          <button className="closedialog" style={{transform: "translateY(50vh)"}} onClick={()=>props.setGame(null)}>{text.UIText.MenuReturn}</button>
         </div>
-      </React.Fragment>
+      </motion.div>
     );
   }
+  
+  return (
+    <AnimatePresence exitBeforeEnter>
+      {content}
+    </AnimatePresence>
+  );
 }
 
 function DebugGame(props) {
@@ -341,7 +373,7 @@ function DebugGame(props) {
   };
 
   return (<>
-    <button className="exitbutton" style={{right: "auto", left: "2vw", top:"3em"}} onClick={props.exit}>Exit</button>
+    <button className="exitbutton" style={{right: "auto", left: "2vw", top:"3em"}} onClick={props.exit}>{text.Inputs.Exit}</button>
     <GameRenderer gameState={debugGame} spectating={false} onPlay={()=>{}} playerID={0} time={"Time"} getDialog={getDialog} setDialog={setDialog}/>
     <CheatSheet />
     <DebugChat isSpectator={false} context={"ingame"}/>
@@ -357,14 +389,14 @@ function DebugChat(props) {
   return (<React.Fragment>
     <div className={"chatarea "+props.context} >
       <form className="chatform" onSubmit={(e)=>{e.preventDefault()}}>
-        <input type="text" className="chatinput" value={messageValue} onChange={e => setMessage(e.target.value)} placeholder="Type..." />
+        <input type="text" className="chatinput" value={messageValue} onChange={e => setMessage(e.target.value)} placeholder={text.Inputs.ChatTypePrmpt} />
         <input type="button" className="chattoggle" onClick={toggleOpenClose} value="Open/Close" />
       </form>
 
       <div className={"chatlogs "+props.context} style={chatState ? {} : {height: '0', opacity: '0'}}>
         <div ref={top}></div>
-          Text messages go here
-        <div className="message" style={{textAlign: "center"}}>-- End of records (30 most recent) --</div>
+          {text.MiscText.DebugChatInfo}
+        <div className="message" style={{textAlign: "center"}}>-- {text.UIText.ChatLimit} --</div>
         <div style={{height: "3vh"}}>------</div>
       </div>
     </div>
@@ -374,22 +406,31 @@ function DebugChat(props) {
 function Login(props) {
   const [formValue, setFormValue] = useState('');
   const [dialog, setDialog] = useState(null);
+
   const login = async (e) => {
     e.preventDefault();
+    const regex = /^[a-zA-Z0-9 _]+$/i;
     if (formValue.length > 15) {
-      setDialog("Name must be 15 letters or less.");
+      setDialog(text.Dialogs.NameTooLong);
+      return;
+    }
+    if (!regex.test(formValue)) {
+      setDialog(text.Dialogs.NameInvalidChars);
       return;
     }
     await auth.signInAnonymously().then(async (ucred) => {
       await ucred.user.updateProfile({displayName: formValue});
       var userdataref = await firestore.collection('userstates').doc(ucred.user.uid);
       if (!(await userdataref.get().exists)) {
-        userdataref.set({
+        await userdataref.set({
           inGame: "",
-          pfp: "",
-          themePref: ""
+          themePref: "",
+          lastlogin: null
         });
       }
+      await userdataref.set({
+        lastlogin: firebase.firestore.Timestamp.now()
+      }, {merge: true})
     });
     props.setter(formValue);
   }
@@ -397,10 +438,9 @@ function Login(props) {
   return (
     <React.Fragment>
       <Dialog gd={dialog} sd={setDialog} />
-      <GamehostStatus hidden={false} />
       <img src={twlogo} alt="Logo" className="applogo"></img>
       <form onSubmit={login}>
-        <input value={formValue} onChange={(e) => setFormValue(e.target.value)} placeholder="Display Name" style={{
+        <input value={formValue} onChange={(e) => setFormValue(e.target.value)} placeholder={text.Inputs.LoginPlaceholder} style={{
           height: "1.5em",
           margin: "1.5em",
           border: "1px solid black",
@@ -409,9 +449,12 @@ function Login(props) {
         <button type="submit" disabled={!formValue} style={{
           height: "2.1em",
           padding: "3px"
-        }}>Login</button>
+        }}>{text.Inputs.LoginBtn}</button>
       </form>
-      <div className="credits">Made with care by Ike and Adam</div>
+
+      <LanguageSelect postChange={setDialog}/>
+      <GamehostStatus hidden={false} />
+      <div className="credits">{text.MiscText.Credits}</div>
     </React.Fragment>
   )
 }
@@ -429,13 +472,17 @@ function Chat(props) {
   const send = async (e) => {
     e.preventDefault();
     if (!messageValue) return;
+    var sendtime = firebase.firestore.Timestamp.now();
     await gamechat.add({
       message: messageValue,
       senderID: user.uid,
       senderName: user.displayName,
-      timestamp: firebase.firestore.Timestamp.now(),
+      timestamp: sendtime,
       spectate: props.isSpectator
     })
+    await props.game.set({
+      lastactivity: sendtime
+    }, {merge: true})
     setChatState(true);
     if (gamechatref.docs.length > 50) { // Message limit
       await gamechat.doc(gamechatref.docs[0].id).delete()
@@ -448,8 +495,8 @@ function Chat(props) {
 
   var ctr = -1;
   var chat;
-  if (error) chat = "Unable to load chat.";
-  else if (loading) chat = "Loading...";
+  if (error) chat = text.MiscText.ErrorChat;
+  else if (loading) chat = text.UIText.Loading;
   else {
     chat = gamechatref.docs.map(msgref => {
       ctr++;
@@ -486,14 +533,14 @@ function Chat(props) {
     <React.Fragment>
       <div className={"chatarea "+props.context} >
         <form className="chatform" onSubmit={send}>
-          <input type="text" className="chatinput" value={messageValue} onChange={e => setMessage(e.target.value)} placeholder="Type..." />
-          <input type="button" onClick={toggleOpenClose} value="Open/Close" />
+          <input type="text" className="chatinput" value={messageValue} onChange={e => setMessage(e.target.value)} placeholder={text.Inputs.ChatTypePrmpt} />
+          <input type="button" onClick={toggleOpenClose} value={text.Inputs.ChatToggle} />
         </form>
 
         <div className={"chatlogs "+props.context} style={chatState ? {} : {height: '0', opacity: '0'}}>
           <div ref={top}></div>
           {chat}
-          <div className="message" style={{textAlign: "center"}}>-- End of records (30 most recent) --</div>
+          <div className="message" style={{textAlign: "center"}}>-- {text.UIText.RecordsEnd} --</div>
           <div style={{height: "3vh"}}>------</div>
         </div>
       </div>
@@ -515,18 +562,18 @@ function RoomSelect(props) {
     console.log(`Logging in to room '${rm}'`)
     const game = roomlist.doc(rm)
     const gamedata = (await game.get()).data();
-    var msg = user.displayName + " is now spectating."
+    var msg = fmt(text.SystemChatMessages.UserSpectate, {user: user.displayName});
     if (!userinfo) return;
     if (user && gamedata) {
       if (gamedata["playercount"] < 4 && gamedata["players"].indexOf(user.uid) === -1 && !gamedata["started"] && userinfo.inGame === "") {
         await game.set({
           players: gamedata["players"].concat([user.uid]),
           playernames: gamedata["playernames"].concat([user.displayName]),
-          playercount: gamedata["playercount"] + 1
+          playercount: gamedata["playercount"] + 1,
         }, {
           merge: true
         });
-        msg = user.displayName + " has joined."
+        msg = fmt(text.SystemChatMessages.JoinRoom, {user: user.displayName});
         await game.collection('chat').add({
           message: msg,
           senderID: "0",
@@ -551,11 +598,14 @@ function RoomSelect(props) {
           timestamp: firebase.firestore.Timestamp.now(),
           spectate: false
         });
+        await game.set({
+          lastactivity: firebase.firestore.Timestamp.now()
+        }, {merge: true});
       }
       props.setGame(rm);
     }
     else if (!(gamedata)) {
-      setDialog("Can't access room data. There may be a problem with your connection, or the room may have been deleted.");
+      setDialog(text.MiscText.ErrorLoadRoom);
       await userstatus.set({
         inGame: ""
       }, {merge: true});
@@ -563,14 +613,16 @@ function RoomSelect(props) {
   };
 
   const createGame = async () => {
-    if (rc || !userinfo) return;
-    setRc(true);
-    if (userinfo.inGame !== "") {
-      setDialog("Cannot create new room when in game.")
-      setRc(false);
+    if (rc || !userinfo) { 
+      setDialog(text.MiscText.ErrorLoadUser)
       return;
     }
-    await roomlist.add({
+    if (userinfo.inGame !== "") {
+      setDialog(text.MiscText.ErrorMultipleRooms)
+      return;
+    }
+    setRc(true);
+    await roomlist.add({ // CHECKED
       deck: [],
       lastPlay: "",
       p1hand: [],
@@ -582,7 +634,7 @@ function RoomSelect(props) {
       players: [],
       points: Array(4).fill(0),
       capturecount: Array(4).fill(0),
-      roomname: user.displayName + "'s Room",
+      roomname: fmt(text.MiscText.DefaultRoomName, {user: user.displayName}),
       started: "",
       talon: [],
       talonprev: [],
@@ -592,12 +644,14 @@ function RoomSelect(props) {
       gamemode: "FFA",
       teamdist: [0,0,0,0],
       roomcreator: user.displayName,
-      date: null,
-      turnorder: []
+      date: firebase.firestore.Timestamp.now(),
+      lastactivity: firebase.firestore.Timestamp.now(),
+      turnorder: [],
+      roomflags: []
     }).then(async (docRef) => {
       console.log("Creating chat logs")
       await docRef.collection('chat').add({
-        message: "Room created at " + String(firebase.firestore.Timestamp.now().toDate()),
+        message: fmt(text.SystemChatMessages.RoomCreate, { time: String(firebase.firestore.Timestamp.now().toDate())}),
         senderID: "0",
         senderName: "[ System ]",
         timestamp: firebase.firestore.Timestamp.now(),
@@ -611,70 +665,95 @@ function RoomSelect(props) {
 
   if (roomError) {
     rmav = (<React.Fragment>
-      An unexpected error occurred - ROOMSELECT component.
+      {fmt(text.MiscText.ErrorComponent, {component: "RoomSelect"})}
     </React.Fragment>)
   }
   else if (loadingRoom) {
     rmav = (
       <React.Fragment>
-        <div>LOADING...</div>
+        <div>{text.UIText.Loading}</div>
       </React.Fragment>
     )
   }
   else {
-    rmav = (rooms.docs.length > 0) ? rooms.docs.map(rm => <RoomOption key={rm.id} join={async() => joinRoom(rm.id)} rm={rm} />) : (<div style={{
-      fontSize: "15px",
-      fontStyle: "italic",
-      margin: "10px"
-    }}>There are currently no available rooms. Create one yourself, or check back later.</div>);
+    rmav = rooms.docs.length > 0 ? rooms.docs.map(rm => (
+      <motion.div key={rm.id} className="rbwrapper" initial={{x: -200, opacity: 0}} animate={{x: 0, opacity: 1}} exit={{x: 200, opacity: 0}}>
+        <RoomOption join={async() => joinRoom(rm.id)} rm={rm} />
+      </motion.div>
+    )) : (
+        <div style={{
+        fontSize: "15px",
+        fontStyle: "italic",
+        margin: "10px"
+      }}>{text.UIText.NoRooms}</div>
+    );
   }
+  var content;
+
   switch (scene) {
     case "tutorial":
-      return (
-        <Tutorial exit={()=>{
-          setScene("");
-        }} user={user}/>
+      content = (
+        <motion.div key="tutorial" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
+          <Tutorial exit={()=>{
+            setScene("");
+          }} user={user}/>
+        </motion.div>
       )
       break;
     case "debug":
-      return (<DebugGame exit={()=>{
-        setScene("");
-      }} />);
-
+      content = (
+        <motion.div key="debug" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
+          <DebugGame exit={()=>{
+          setScene("");
+          }} />
+        </motion.div>
+      );
+      break;
     default:
-      return (
-        <React.Fragment>
-          <GamehostStatus hidden={false}/>
+      content = (
+        <motion.div key="roomselection" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
           <div className="roomscroll">
             <div className="stickied">
               <h1>
-                Welcome, {user ? (user.displayName || props.username) : "Anonymous"}!
+                {fmt(text.UIText.WelcomeText, {user: user ? (user.displayName || props.username) : "Anonymous"})}
               </h1>
               <button onClick={async () => {
                 props.setName(null);
                 await userstatus.delete();
                 await auth.currentUser.delete();
-              }}>Sign Out</button>
-              <button onClick={createGame}>Create New Game</button>
+                await auth.signOut();
+              }}>{text.Inputs.LogOff}</button>
+              <button onClick={createGame}>{text.Inputs.NewGame}</button>
               <button onClick={()=>{
                 setScene("tutorial");
-              }}>How to play</button>
+              }}>{text.Inputs.Tutorial}</button>
               <button onClick={()=>{
                 setScene("debug");
-              }}>Game Layout (Debug)</button>
+              }}>{text.Inputs.DebugLayout}</button>
               {
                 userinfo && userinfo.inGame !== "" ? (<p>
-                  Currently in game <button onClick={()=>{joinRoom(userinfo.inGame)}}>{userinfo.inGame}</button>
+                  {text.UIText.CurrentRoomText} <button onClick={()=>{joinRoom(userinfo.inGame)}}>{userinfo.inGame}</button>
                 </p>) : null
               }
-              <h2>Available Rooms...</h2>
+              <h2>{text.UIText.AvailableRooms}</h2>
             </div>
-            {rmav}
+            <AnimatePresence exitBeforeEnter>
+              {rmav}
+            </AnimatePresence>
           </div>
           <Dialog gd={dialog} sd={setDialog} />
-        </React.Fragment>
+
+          <LanguageSelect postChange={setDialog}/>
+          <GamehostStatus hidden={false} />
+        </motion.div>
       );
+      break;
   }
+  return (
+    <AnimatePresence exitBeforeEnter>
+      {content}
+    </AnimatePresence>
+  )
 }
 
 function RoomStart(props) {
@@ -690,7 +769,7 @@ function RoomStart(props) {
   const startGame = async () => {
     if (gameState.started) return;
     if (gameState.playercount <= 1) {
-      setDialog("You must have at least 2 players!");
+      setDialog(text.Dialogs.RequirePlayers);
       return;
     }
 
@@ -701,8 +780,8 @@ function RoomStart(props) {
         if (elem === 1) reds++;
         else blues++;
       });
-      if ((blues !== reds)) {
-        setDialog("Cannot have empty teams!");
+      if ((!blues || !reds)) {
+        setDialog(text.Dialogs.NoEmptyTeams);
         return;
       }
     }
@@ -717,11 +796,11 @@ function RoomStart(props) {
       }
     }).then(obj=>{
       if (!obj.ok) {
-        setDialog("Gamehost is currently offline.");
+        setDialog(text.Dialogs.GamehostOffline);
         connect = false;
       }
     }).catch(err=>{
-      setDialog("An error occurred when sending the server check: "+String(err));
+      setDialog(fmt(text.MiscText.ErrorSendGamehost, {error: String(err)}));
       connect = false;
     });
 
@@ -755,15 +834,14 @@ function RoomStart(props) {
       turn: 0,
       lastPlay: "game start",
       date: firebase.firestore.Timestamp.now(),
-      turnorder: torder
+      turnorder: torder,
+      lastcaptureplayer: null
     }
 
-    var toMSG = "Turn order is ";
+    var toMSG = "";
     torder.forEach((num) => {
       toMSG += gameState.playernames[num] + " -> ";
     });
-    toMSG += "(Restart)";
-
 
     for (let i = 0; i < gameState.playercount; i++) initializer["p" + String(i+1) + "hand"] = hands[i].map(crd => crd.toString());
 
@@ -771,14 +849,14 @@ function RoomStart(props) {
       merge: true
     });
     await game.collection('chat').add({
-      message: "Game started. Player and spectator chats are now separate.",
+      message: text.SystemChatMessages.GameStartChatSep,
       senderID: "0",
       senderName: "[ System ]",
       timestamp: firebase.firestore.Timestamp.now(),
       spectate: false
     });
     game.collection('chat').add({
-      message: toMSG,
+      message: fmt(text.SystemChatMessages.TurnOrder, {torderstring: toMSG}),
       senderID: "0",
       senderName: "[ System ]",
       timestamp: firebase.firestore.Timestamp.now(),
@@ -797,7 +875,7 @@ function RoomStart(props) {
 
     if (gameState.gamemode === "TEM") {
       await game.collection('chat').add({
-        message: "Gamemode is now set to Free For All (FFA).",
+        message: fmt(text.SystemChatMessages.ToggleGamemode, {gamemode: "Free For All (FFA)"}),
         senderID: "0",
         senderName: "[ System ]",
         timestamp: firebase.firestore.Timestamp.now(),
@@ -846,7 +924,7 @@ function RoomStart(props) {
             merge: true
           });
           await game.collection('chat').add({
-            message: user.displayName + " is now a player!",
+            message: fmt(text.SystemChatMessages.UserPlayer, {user: user.displayName}),
             senderID: "0",
             senderName: "[ System ]",
             timestamp: firebase.firestore.Timestamp.now(),
@@ -854,14 +932,14 @@ function RoomStart(props) {
           });
         }
       }
-      else setDialog("An unexpected error occurred.")
-    } else await removeAsPlayer(user.displayName + " has joined the spectators' booth.");
+      else setDialog(text.MiscText.ErrorGeneric)
+    } else await removeAsPlayer(fmt(text.SystemChatMessages.UserSpectate, {user: user.displayName}));
   };
 
   const leaveGame = async () => {
     if (props.isSpectator) {
       await game.collection('chat').add({
-        message: user.displayName + " has left the spectator's booth.",
+        message: fmt(text.SystemChatMessages.LeaveSpectate, {user: user.displayName}),
         senderID: "0",
         senderName: "[ System ]",
         timestamp: firebase.firestore.Timestamp.now(),
@@ -870,7 +948,7 @@ function RoomStart(props) {
       props.setGame(null);
       return;
     }
-    await removeAsPlayer(user.displayName + " has left.").then(()=>{props.setGame(null)});
+    await removeAsPlayer(fmt(text.SystemChatMessages.LeaveRoom, {user: user.displayName})).then(()=>{props.setGame(null)});
   };
 
   const toggleGamemode = async () => {
@@ -879,7 +957,7 @@ function RoomStart(props) {
       settings.gamemode = "TEM";
       settings.teamdist = [1,1,0,0];
       await game.collection('chat').add({
-        message: "Gamemode is now set to Teams (TEM).",
+        message: fmt(text.SystemChatMessages.ToggleGamemode, {gamemode: "Teams (TEM)"}),
         senderID: "0",
         senderName: "[ System ]",
         timestamp: firebase.firestore.Timestamp.now(),
@@ -889,7 +967,7 @@ function RoomStart(props) {
       settings.gamemode = "FFA";
       settings.teamdist = [0,0,0,0];
       await game.collection('chat').add({
-        message: "Gamemode is now set to Free For All (FFA).",
+        message: fmt(text.SystemChatMessages.ToggleGamemode, {gamemode: "Free For All (FFA)"}),
         senderID: "0",
         senderName: "[ System ]",
         timestamp: firebase.firestore.Timestamp.now(),
@@ -908,6 +986,8 @@ function RoomStart(props) {
     }, {merge: true});
   }
 
+  var content;
+
   if (gameState && !loading && !error) {
     var players = [];
     for (let i = 0; i < gameState.playercount; i++) {
@@ -918,46 +998,44 @@ function RoomStart(props) {
             fontWeight: (i === playerIndex ? "bold" : "normal")
           }}>
             {gameState.playernames[i]} - 
-            <span style={{fontWeight: "normal"}}> {gameState.points[i]} Pts</span>
+            <span style={{fontWeight: "normal"}}> {gameState.points[i]} {text.UIText.PointsAbbrv}</span>
           </div>
         </React.Fragment>
       )
     }
-    return (
-      <React.Fragment>
+    content = (
+      <motion.div key="lobby" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
         <Dialog gd={dialogMessage} sd={setDialog} />
         <Chat context="lobby" game={game} isSpectator={spectator} gameStarted={false}/>
         <GamehostStatus hidden={false} />
         <h1> { gameState.roomname } </h1>
         { gameState.winner && 
-          <h2> 
-            <span style={{fontWeight: "normal"}}>Winner: </span>
-              {gameState.winner}
-            <span style={{fontWeight: "normal"}}> with </span>
-             {gameState.winnerscore}
-            <span style={{fontWeight: "normal"}}> points!</span>
-          </h2>
+          <h2 dangerouslySetInnerHTML={{__html: purify(fmt(text.UIText.WinnerTitle, {winner: gameState.winner, winnerscore: String(gameState.winnerscore)}))}} />
         }
         
-        <div style={{fontWeight: "bold", margin: "10px"}}>Players:</div>
+        <div style={{fontWeight: "bold", margin: "10px"}}>{text.UIText.PlayersHeader}</div>
         
         { players }
 
-        { spectator ? null : <button onClick={startGame}>Start Game</button> }
-        <button onClick={switchGame}>{spectator ? "Switch to Player" : "Switch to Spectator"}</button>
+        { spectator ? null : <button onClick={startGame}>{text.Inputs.StartGame}</button> }
+        <button onClick={switchGame}>{spectator ? text.Inputs.SpecToPlay : text.Inputs.PlayToSpec}</button>
         { spectator ? null : <React.Fragment>
-          <button onClick={toggleGamemode} disabled={gameState.playercount !== 4}>Gamemode: {gameState.gamemode}</button>
-          { gameState.gamemode === "TEM" && <button onClick={switchTeams}>Switch Teams</button> }
+          <button onClick={toggleGamemode} disabled={gameState.playercount !== 4}>{fmt(text.Inputs.Gamemode, {gamemode: gameState.gamemode})}</button>
+          { gameState.gamemode === "TEM" && <button onClick={switchTeams}>{text.Inputs.SwitchTeams}</button> }
         </React.Fragment> }
-        <button onClick={leaveGame}>Leave Game</button>
-      </React.Fragment>
-    )
+        <button onClick={leaveGame}>{text.Inputs.LeaveGame}</button>
+      </motion.div>
+    );
   } else {
-    return (
-      <React.Fragment>
-      </React.Fragment>
-    )
+    content = (
+      <motion.div key="blank" initial={opacityOut} animate={opacityIn} exit={opacityOut}/>
+    );
   }
+  return (
+    <AnimatePresence exitBeforeEnter>
+      {content}
+    </AnimatePresence>
+  );
 }
 
 function RoomOption(props) {
@@ -966,38 +1044,58 @@ function RoomOption(props) {
   const nojoin = data["playercount"] === 4;
   if (!auth.currentUser) {
     return (<React.Fragment>
-      An unexpected error occurred - ROOMOPTION component.
+      {fmt(text.MiscText.ErrorComponent, {component: "RoomOption"})}
     </React.Fragment>)
   }
   return (
-    <React.Fragment>
-      <div className="rbwrapper">
-        <div className={"roombutton" + (nojoin ? " nojoin" : "")} onClick={props.join}>
-          <div className={"roominfo" + (nojoin ? " nojoin" : "")}>
-            <div style={{fontSize: "2em", fontWeight: "bold"}}>{data["roomname"]}</div>
-            <div style={{fontSize: "1.5em"}}>{data["roomcreator"]}</div>
-            <div style={{fontSize: "1em", fontStyle: "italic", color: "lightgray"}}>Room ID: {props.rm.id}</div>
-          </div>
-          <div className="roomstats">
-            <div style={{flexGrow: "1"}}><b>{data["playercount"]}</b>/4 Players</div>
-            <div style={{flexGrow: "1"}}>{isProtected ? "Public" : "Protected"}</div>
-            <div style={{flexGrow: "1"}}>{data["started"] ? "In Game" : "In Lobby"}</div>
-          </div>
-        </div>
+    <div className={"roombutton" + (nojoin ? " nojoin" : "")} onClick={props.join}>
+      <div className={"roominfo" + (nojoin ? " nojoin" : "")}>
+        <div style={{fontSize: "2em", fontWeight: "bold"}}>{data["roomname"]}</div>
+        <div style={{fontSize: "1.5em"}}>{data["roomcreator"]}</div>
+        <div style={{fontSize: "1em", fontStyle: "italic", color: "lightgray"}}>{fmt(text.UIText.RoomID, {roomid: props.rm.id})}</div>
       </div>
-    </React.Fragment>
-  )
+      <div className="roomstats">
+        <div style={{flexGrow: "1"}}><b>{data["playercount"]}</b>/4 {text.UIText.PlayersHeader}</div>
+        <div style={{flexGrow: "1"}}>{isProtected ? text.UIText.Public : text.UIText.Protected}</div>
+        <div style={{flexGrow: "1"}}>{data["started"] ? text.UIText.InGame : text.UIText.InLobby}</div>
+      </div>
+    </div>
+  );
 }
 
 function App() {
   const [user] = useAuthState(auth);
   const [gameID, setGame] = useState(null);
   const [username, setUsername] = useState("Anonymous");
+
+  var content;
+  if (user) {
+    if (gameID) {
+      content = (
+        <motion.div key="game" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
+          <NetworkGame gameID={gameID} setGame={setGame}/>
+        </motion.div>
+      );
+    } else {
+      content = (
+        <motion.div key="roomselection" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
+          <RoomSelect username={username} setGame={setGame} setName={setUsername} />
+        </motion.div>
+      );
+    }
+  }
+  else {
+    content = (
+      <motion.div key="login" initial={opacityOut} animate={opacityIn} exit={opacityOut}>
+        <Login setter={setUsername}/>
+      </motion.div>
+    );
+  }
   return (
     <div className="App">
-      {
-        (user) ? (gameID ? <NetworkGame gameID={gameID} setGame={setGame}/> : <RoomSelect username={username} setGame={setGame} setName={setUsername} />) : <Login setter={setUsername}/>
-      }
+      <AnimatePresence exitBeforeEnter>
+        { content }
+      </AnimatePresence>
     </div>
   );
 }

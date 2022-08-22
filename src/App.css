@@ -77,6 +77,12 @@ input[type=text]:focus {
   width:  100vw;
 }
 
+.contenttab {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
 .screencover {
   position: fixed;
   left: 0;
@@ -84,6 +90,7 @@ input[type=text]:focus {
   width: 100vw;
   height: 100vh;
   z-index: 5;
+  transition: 0.5s;
 }
 
 .applogo {
@@ -104,12 +111,24 @@ input[type=text]:focus {
 .statusbox {
   position: fixed;
   left: 5vw;
-  top: 5vw;
+  top: 5vh;
   bottom: auto;
   right: auto;
   height: 1em;
   padding: 0.5em;
   border: gray solid 1px;
+}
+.langselectbar {
+  position: fixed;
+  right: 5vw;
+  top: 5vh;
+  width: 20vw;
+  bottom: auto;
+  left: auto;
+  height: 2em;
+  padding: 0em;
+  border: gray solid 1px;
+  text-align: right;
 }
 
 .stickied {
@@ -162,26 +181,11 @@ input[type=text]:focus {
   animation: border-dance 2s infinite linear;
 }
 
-.player.spectate:hover::before {
-  content: "";
-  display: block;
-  position: absolute;
-  left: -4px;
-  top: -4px;
-  height: calc(100% + 8px);
-  width: calc(100% + 8px);
-  background: linear-gradient(90deg, red 50%, transparent 50%), linear-gradient(90deg, red 50%, transparent 50%), linear-gradient(0deg, red 50%, transparent 50%), linear-gradient(0deg, red 50%, transparent 50%);
-  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
-  background-size: 15px 4px, 15px 4px, 4px 15px, 4px 15px;
-  background-position: 0px 0px, 0px 100%, 0px 0px, 100% 0px; /* TOP BOTTOM LEFT RIGHT */
-  padding: 0px;
-  animation: border-dance 2s infinite linear;
-  transition:  0.5s;
-}
-
 .player.spectate:hover {
   cursor: pointer;
-  background-color: rgba(255,0,0,0.1);
+  background-color: rgba(255,255,0,0.3);
+  border: 2px rgba(255,255,0,1) dashed;
+  transform: translateY(-3px);
 }
 
 .crdcontainer {
@@ -276,14 +280,32 @@ input[type=text]:focus {
   background-color: white;
 }
 
+.playershadow {
+  position: fixed;
+  width: 13vh;
+  height: 13vh;
+  background-color: darkgray;
+  border: solid 2px darkgray;
+}
+
 .player {
   display: flex;
   flex-direction: column;
   text-align: left;
   border: 2px dashed gray;
-  position: fixed;
-  width: 13vh;
-  height: 13vh;
+  position: absolute;
+  left: -2px;
+  top: -2px;
+  width: 100%;
+  height: 100%;
+  transition: 0.3s;
+}
+
+
+.np {
+  border:  2px solid white;
+  transform: translateY(-6px);
+  background-color:  rgba(255,255,255,0.4);
 }
 
 .north {
@@ -400,14 +422,13 @@ input[type=text]:focus {
   width: 100%;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 .rbwrapper {
-  transition: 0.4s;
   background-color: rgb(50,50,50);
   width: 80%;
   margin: auto;
   margin-top: 10px;
-  animation: room-button-creation 0.4s ease-out;
 }
 
 .turnindicator {
@@ -603,7 +624,10 @@ input[type=text]:focus {
   flex-direction: row-reverse;
   position: static;
   width: 100%;
+  height: 1.5em;
   transition: 0.5s;
+  overflow-x: hidden;
+  white-space: nowrap;
 }
 
 .csopen {
@@ -637,11 +661,11 @@ input[type=text]:focus {
 
 .blue {
   border-color: blue;
-  background-color: rgba(0,0,255,0.2);
+  background-color: rgba(100,100,255,1);
 }
 .red {
   border-color: red;
-  background-color: rgba(255,0,0,0.2);
+  background-color: rgba(255,100,100,1);
 }
 
 @media only screen and (max-aspect-ratio: 1/1) {
