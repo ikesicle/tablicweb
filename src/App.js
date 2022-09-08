@@ -25,6 +25,8 @@ const purify = DOMPurify.sanitize;
 const opacityIn = { opacity: 1 };
 const opacityOut = { opacity: 0 };
 
+// TODO: 
+
 function GamehostStatus(props) {
   const [ status, setStatus ] = useState(false);
 
