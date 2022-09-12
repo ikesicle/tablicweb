@@ -1,94 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { cards } from './cards.js';
-import cardcount from './cardcount.png';
-import cardcap from './cardcap.png';
-import { verifyCap, Card, evaluatePoints } from './tablic.js';
-import anime from './anime.es.js';
-import { text, fmt } from './locales.js';
+import cardcount from 'assets/cardcount.png';
+import cardcap from 'assets/cardcap.png';
+import { verifyCap, Card, evaluatePoints } from 'util/tablic.js';
+import anime from 'util/anime.es.js';
+import { text, fmt } from 'util/locales.js';
 import DOMPurify from 'dompurify';
 
+import CardDisplay from './game/carddisplay.js';
+import GameAnimCtx from './game/animcontext.js';
+import Hand from './game/hand.js';
+import Talon from './game/talon.js';
+import Dialog from './dialog.js';
+
+
 const cardinal = ["east ", "north ", "west "];
-
-function Dialog(props) {
-  return (
-    <div className="dialog" style={props.gd ? {opacity: "1"} : {top: "-40vh", opacity: "0"}}>
-      <div style={{flexGrow: "10"}}> {props.gd} </div>
-      <button className="closedialog" onClick={()=>props.sd(null)}>{text.Inputs.OkButton}</button>
-    </div>
-  );
-}
-
-function CardVis(props) {
-  let cstyle = props.cstyle;
-  if (!cstyle.bottom) cstyle.bottom = props.selected ? "10%" : "5%";
-  return (
-    <div className={"crdcontainer" + (props.selected ? " selectborder" : "")} style={cstyle} value={props.type} onClick={()=>{
-      props.onClick(props.type);
-    }}>
-      <img src={cards[props.type]} alt={Card.parse(props.type)} className="card" />
-    </div>
-  )
-}
-
-function Talon(props) {
-  var cnt = 1;
-  return (
-      <div className="talon-grid">
-        <div className="sectionlabel">{text.UIText.Talon}</div>
-        {props.data && props.data.map(
-          crd => <CardVis key={crd} type={crd} selected={(props.selectedTalon.indexOf(crd) !== -1)} cstyle={{
-            left: "calc(" + String(((cnt++) / (props.data.length + 1) * 70 + 15).toPrecision(4)) + "% - 7.7vh",
-            animation: "card-creation 0.4s ease-out"
-          }}
-          onClick={() => {
-            var k = props.selectedTalon.slice();
-            if (k.indexOf(crd) === -1) k.push(crd);
-            else k.splice(k.indexOf(crd), 1);
-            props.selectTalon(k);
-          }} />
-        )}
-      </div>
-    )
-}
-
-function Hand(props) {
-  let cindex = 0;
-  let startingoffset = 37.5-2.5*(props.data.length-1);
-  return (
-    <div className="player-hand">
-      <div className="sectionlabel">{text.UIText.Hand}</div>
-      {props.data && props.data.map( crd =>
-        <CardVis key={cindex} type={crd} selected={(props.selectedHand === crd)} 
-        cstyle={{
-          left: "calc(" + String(startingoffset + (cindex++) * 5) + "% - 7.7vh)",
-          animation: "card-creation 0.4s ease-out",
-          zIndex: 7
-        }}
-        onClick={props.selectHand} st={props.selectedHand}/>
-      )}
-    </div>
-  )
-}
-
-function AnimationContext(props) {
-  const [ currentAnimation, setCurrentAnimation ] = useState([]);
-  useEffect(() => {
-    if (props.animation) {
-      let tl = anime.timeline(props.animation[0]);
-      for (let i = 1; i < props.animation.length; i++) 
-        if (!("length" in props.animation[i])) tl.add(props.animation[i]);
-        else tl.add(props.animation[i][0], props.animation[i][1]);
-
-      setCurrentAnimation(tl);
-      tl.restart();
-    }
-  }, [props.content]);
-  return (<>
-    <div className="animation">
-      {props.content}
-    </div>
-  </>)
-}
 
 function GameRenderer(props) {
   const [ spectatorView, setView ] = useState(0);
@@ -145,7 +70,7 @@ function GameRenderer(props) {
         let lpos;
         for (let i = 2; i < command.length; i++) {
           lpos = (gameState.talonprev.indexOf(command[i])+1) / (gameState.talonprev.length + 1) * 70 + 15;
-          obj.push(<CardVis key={i} type={command[i]} selected={false} cstyle={{
+          obj.push(<CardDisplay key={i} type={command[i]} selected={false} cstyle={{
             left: "calc(" + String((lpos).toPrecision(4)) + "% - 7.7vh",
             bottom: "43vh",
             position: "fixed",
@@ -155,7 +80,7 @@ function GameRenderer(props) {
             transition: "0s"
           }}/>)
         }
-        obj.push(<CardVis key="played" type={command[1]} selected={false} cstyle={{
+        obj.push(<CardDisplay key="played" type={command[1]} selected={false} cstyle={{
           position: "fixed",
           bottom: "0",
           left: "calc(50vw - 7vh)",
@@ -328,7 +253,7 @@ function GameRenderer(props) {
     }
     return (
       <React.Fragment>
-        <AnimationContext animation={currentAnimation} content={animatedObjects} />
+        <GameAnimCtx animation={currentAnimation} content={animatedObjects} />
         <Dialog gd={getDialog} sd={setDialog} />
         <Hand data={yourHand} selectHand={spectating ? ()=>{} : selectHand} selectedHand={spectating ? [] : selectedHand}/>
         { spectating ? (<div className="spectating">Spectating {gameState.playernames[playerIndex]}</div>) : <button className="pushaction" onClick={preprocess} disabled={gameState.turnorder[gameState.turn] !== playerIndex}>{ selectedTalon.length === 0 ? text.Inputs.PlayCard : text.Inputs.CaptureCard}</button> }
@@ -349,4 +274,4 @@ function GameRenderer(props) {
   } else return null;
 }
 
-export { Dialog, GameRenderer };
+export default GameRenderer;

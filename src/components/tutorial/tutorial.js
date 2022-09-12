@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { evaluatePoints } from './tablic.js';
-import { GameRenderer } from './renderer.js';
-import { LocaleManager, fmt } from './locales.js';
+import { evaluatePoints } from 'util/tablic.js';
+import GameRenderer from 'components/gamerenderer.js';
+import { LocaleManager, fmt } from 'util/locales.js';
 import DOMPurify from 'dompurify';
 
 function TutorialDialog(props) {
